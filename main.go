@@ -145,6 +145,7 @@ type accounts struct {
 	discoveredAt time.Time
 	active       map[string]string
 	spentUntil   map[string]time.Time
+	served       map[string]int
 }
 
 func newAccounts(home, credentials, claude string) *accounts {
@@ -158,7 +159,7 @@ func newAccounts(home, credentials, claude string) *accounts {
 		claude, _ = exec.LookPath("claude")
 	}
 	return &accounts{home: home, credentials: credentials, claude: claude, now: time.Now,
-		active: map[string]string{}, spentUntil: map[string]time.Time{}}
+		active: map[string]string{}, spentUntil: map[string]time.Time{}, served: map[string]int{}}
 }
 
 func (a *accounts) list() []account {
@@ -365,11 +366,37 @@ func (a *accounts) spend(client, id string, until time.Time) *account {
 	return usable
 }
 
+// use makes id the client's active account; false when no such login is signed in. A chosen
+// account loses its spent mark: if its window is still spent, the next reply says so again.
+func (a *accounts) use(client, id string) bool {
+	list := a.list()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, acc := range list {
+		if acc.ID == id {
+			a.active[client] = id
+			delete(a.spentUntil, id)
+			log.Printf("account %s chosen for client %s", id, client)
+			return true
+		}
+	}
+	return false
+}
+
 type accountStatus struct {
 	ID         string   `json:"id"`
 	Email      string   `json:"email,omitempty"`
 	SpentUntil *int64   `json:"spentUntil"`
 	ActiveFor  []string `json:"activeFor"`
+	// Served counts the messages replies this account gave since the proxy started.
+	Served int `json:"served"`
+}
+
+// answered counts a messages reply given on the account.
+func (a *accounts) answered(id string) {
+	a.mu.Lock()
+	a.served[id]++
+	a.mu.Unlock()
 }
 
 func (a *accounts) status() []accountStatus {
@@ -378,7 +405,7 @@ func (a *accounts) status() []accountStatus {
 	now := a.now()
 	out := []accountStatus{}
 	for _, acc := range a.discovered {
-		s := accountStatus{ID: acc.ID, Email: acc.Email, ActiveFor: []string{}}
+		s := accountStatus{ID: acc.ID, Email: acc.Email, ActiveFor: []string{}, Served: a.served[acc.ID]}
 		if until := a.spentUntil[acc.ID]; until.After(now) {
 			unix := until.Unix()
 			s.SpentUntil = &unix
@@ -418,6 +445,10 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.accounts.list()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(p.accounts.status())
+		return
+	}
+	if r.URL.Path == "/_use" {
+		p.use(w, r)
 		return
 	}
 	clientName, path, ok := route(r.URL.RequestURI())
@@ -474,10 +505,41 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		}
+		p.accounts.answered(acc.ID)
 		relay(w, resp)
 		return
 	}
 	p.passThrough(w, r, path, body)
+}
+
+// use answers `POST /_use {"id": "<account>", "client": "<client>"}` (client defaults to the shared
+// one). JSON only and answered here, preflight included, so a web page cannot switch accounts.
+func (p *proxy) use(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		apiError(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		apiError(w, http.StatusUnsupportedMediaType, "send JSON")
+		return
+	}
+	var req struct {
+		ID     string `json:"id"`
+		Client string `json:"client"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req) != nil || req.ID == "" {
+		apiError(w, http.StatusBadRequest, `want {"id": "<account>"}`)
+		return
+	}
+	if req.Client == "" {
+		req.Client = sharedClient
+	}
+	if !p.accounts.use(req.Client, req.ID) {
+		apiError(w, http.StatusNotFound, fmt.Sprintf("no account named %q", req.ID))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(p.accounts.status())
 }
 
 // A proxy that cannot place a request on an account sends it on as Claude Code made it: it is

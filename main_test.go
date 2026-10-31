@@ -172,13 +172,16 @@ func TestAccountsAreTheDefaultAndEveryDotClaudeDirWithALogin(t *testing.T) {
 
 func TestMovesToTheNextAccountWhenOneIsSpentWithoutTheClientNoticing(t *testing.T) {
 	up := newUpstream(t, "t-default")
-	server, _ := start(t, makeHome(t, map[string]string{"default": "t-default", "work": "t-work"}), up)
+	server, acc := start(t, makeHome(t, map[string]string{"default": "t-default", "work": "t-work"}), up)
 	if status, body := post(t, server.URL, "/v1/messages"); status != 200 || body != "event: a\n\ndata: b\n\n" {
 		t.Fatal(status, body)
 	}
 	post(t, server.URL, "/v1/messages")
 	if strings.Join(up.seen, ",") != "Bearer t-default,Bearer t-work,Bearer t-work" {
 		t.Fatal(up.seen)
+	}
+	if acc.served["default"] != 0 || acc.served["work"] != 2 {
+		t.Fatal("a spent reply was counted as served", acc.served)
 	}
 }
 
@@ -249,5 +252,40 @@ func TestWithoutAnyUsableAccountTheRequestGoesOnWithClaudesOwnLogin(t *testing.T
 	}
 	if strings.Join(up.seen, ",") != "Bearer claude-own-login" {
 		t.Fatal(up.seen)
+	}
+}
+
+func TestUseSwitchesTheSharedClientAndOnlyTakesJSON(t *testing.T) {
+	up := newUpstream(t)
+	server, acc := start(t, makeHome(t, map[string]string{"default": "t-default", "work": "t-work"}), up)
+	send := func(method, contentType, body string) int {
+		req, _ := http.NewRequest(method, server.URL+"/_use", strings.NewReader(body))
+		req.Header.Set("Content-Type", contentType)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if status := send("POST", "text/plain", `{"id":"work"}`); status != 415 {
+		t.Fatal("a form post switched accounts", status)
+	}
+	if status := send("OPTIONS", "application/json", ""); status != 405 {
+		t.Fatal("preflight went upstream", status)
+	}
+	if status := send("POST", "application/json", `{"id":"nobody"}`); status != 404 {
+		t.Fatal(status)
+	}
+	post(t, server.URL, "/v1/messages")
+	if status := send("POST", "application/json", `{"id":"work"}`); status != 200 {
+		t.Fatal(status)
+	}
+	post(t, server.URL, "/v1/messages")
+	if strings.Join(up.seen, ",") != "Bearer t-default,Bearer t-work" {
+		t.Fatal(up.seen)
+	}
+	if acc.served["default"] != 1 || acc.served["work"] != 1 {
+		t.Fatal(acc.served)
 	}
 }

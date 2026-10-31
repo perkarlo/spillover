@@ -64,10 +64,13 @@ That defines a `claude` function that points Claude Code at the proxy when it is
 limitbreak add            # signs in a new account in your browser, names it account-N
 limitbreak add work       # or pick the name
 limitbreak list           # accounts, who they are, which one is active (*)
+limitbreak use work       # send requests on this account from now on, until it is spent
 limitbreak remove work    # sign it out and delete its login from this machine
 ```
 
-`add` runs Claude Code's own browser sign-in into its own config directory (`~/.claude-<name>`), checks the login landed, tells you which email it is, and warns if you added the same account twice. The running proxy picks it up within 30 seconds; no restart. The default account is whatever plain `claude auth login` signs in. Raw status for scripts: `curl -s http://127.0.0.1:48617/_status`.
+`add` runs Claude Code's own browser sign-in into its own config directory (`~/.claude-<name>`), checks the login landed, tells you which email it is, and warns if you added the same account twice. The running proxy picks it up within 30 seconds; no restart. The default account is whatever plain `claude auth login` signs in. Raw status for scripts: `curl -s http://127.0.0.1:48617/_status`; its `served` field counts the messages replies each account gave since the proxy started.
+
+`use` switches running sessions on their next request, no restart. The choice lives in the proxy's memory: a restart goes back to the default account. Scripts can send `POST /_use` with `{"id": "work"}` (and `"client"` for a `/_c/<client>/` prefix); the endpoint takes JSON only, so a web page cannot switch accounts.
 
 Every switch is logged (`~/Library/Logs/limitbreak.log` on macOS, the journal on Linux): the account that ran out, when it resets, and the one now serving.
 

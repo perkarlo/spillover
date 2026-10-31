@@ -91,3 +91,15 @@ func TestListMarksTheActiveAccountFromStatus(t *testing.T) {
 		t.Fatal("active not read")
 	}
 }
+
+func TestUseReportsTheProxysAnswer(t *testing.T) {
+	up := newUpstream(t)
+	server, acc := start(t, makeHome(t, map[string]string{"default": "t-default", "work": "t-work"}), up)
+	var out bytes.Buffer
+	if err := useAccount(server.URL, "work", &out); err != nil || out.String() != "Now on work.\n" || acc.active["shared"] != "work" {
+		t.Fatal(err, out.String(), acc.active)
+	}
+	if err := useAccount(server.URL, "nobody", &out); err == nil || !strings.Contains(err.Error(), `no account named "nobody"`) {
+		t.Fatal(err)
+	}
+}

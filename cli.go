@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 const usage = `limitbreak [serve flags]        run the proxy (default)
 limitbreak add [name]           sign in a new account (opens the browser)
 limitbreak list                 show the accounts
+limitbreak use <name>           send requests on this account from now on (until it is spent)
 limitbreak remove <name> [-y]   sign an account out and delete its login
 limitbreak video                watch a switch happen as an arcade battle (simulated, no real login touched)
 
@@ -46,6 +48,12 @@ func runCommand(command string, args []string) int {
 		err = runVideo(os.Stdout)
 	case "list":
 		listAccounts(a, os.Stdout)
+	case "use":
+		if len(args) != 1 {
+			fmt.Fprintln(os.Stderr, "usage: limitbreak use <name>")
+			return 2
+		}
+		err = useAccount(proxyURL(), args[0], os.Stdout)
 	case "remove":
 		err = removeAccount(a, args, os.Stdin, os.Stdout)
 	default:
@@ -168,9 +176,35 @@ func listAccounts(a *accounts, out io.Writer) {
 	}
 }
 
+func proxyURL() string {
+	return fmt.Sprintf("http://127.0.0.1:%d", envInt("LIMITBREAK_PORT", defaultPort))
+}
+
+// useAccount tells the running proxy to send the shared client's requests on the named account.
+func useAccount(base, name string, out io.Writer) error {
+	body, _ := json.Marshal(map[string]string{"id": name})
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Post(base+"/_use", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("proxy not running: start it with the installed service, or `limitbreak`")
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		var reply struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(raw, &reply)
+		return fmt.Errorf("%s", reply.Error.Message)
+	}
+	fmt.Fprintf(out, "Now on %s.\n", name)
+	return nil
+}
+
 // activeAccount asks the running proxy which account the shared client is on; empty when it is down.
 func activeAccount() string {
-	resp, err := (&http.Client{Timeout: time.Second}).Get(fmt.Sprintf("http://127.0.0.1:%d/_status", envInt("LIMITBREAK_PORT", defaultPort)))
+	resp, err := (&http.Client{Timeout: time.Second}).Get(proxyURL() + "/_status")
 	if err != nil {
 		return ""
 	}
