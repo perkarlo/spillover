@@ -20,6 +20,8 @@ const usage = `limitbreak [serve flags]        run the proxy (default)
 limitbreak add [name]           sign in a new account (opens the browser)
 limitbreak list                 show the accounts
 limitbreak use <name>           send requests on this account from now on (until it is spent)
+limitbreak usage [--all] [--json]
+                                how full the active account (or every account) is, and when it resets
 limitbreak remove <name> [-y]   sign an account out and delete its login
 limitbreak video                watch a switch happen as an arcade battle (simulated, no real login touched)
 
@@ -54,6 +56,14 @@ func runCommand(command string, args []string) int {
 			return 2
 		}
 		err = useAccount(proxyURL(), args[0], os.Stdout)
+	case "usage":
+		q, ok := usageFlags(args)
+		if !ok {
+			fmt.Fprintln(os.Stderr, "usage: limitbreak usage [--all] [--json]")
+			return 2
+		}
+		q.proxyChoice, q.proxyUp = proxyActive()
+		err = showUsage(a, envString("LIMITBREAK_UPSTREAM", "https://api.anthropic.com"), q, os.Stdout)
 	case "remove":
 		err = removeAccount(a, args, os.Stdin, os.Stdout)
 	default:
@@ -159,7 +169,10 @@ func listAccounts(a *accounts, out io.Writer) {
 		fmt.Fprintln(out, "No accounts signed in. Run `claude auth login` (default) or `limitbreak add`.")
 		return
 	}
-	active := activeAccount()
+	active, up := proxyActive()
+	if up {
+		active = pickActive(list, active)
+	}
 	for _, acc := range list {
 		mark := " "
 		if acc.ID == active {
@@ -171,7 +184,7 @@ func listAccounts(a *accounts, out io.Writer) {
 		}
 		fmt.Fprintf(out, "%s %-16s %s\n", mark, acc.ID, email)
 	}
-	if active == "" {
+	if !up {
 		fmt.Fprintln(out, "(proxy not running: start it with the installed service, or `limitbreak`)")
 	}
 }
@@ -202,15 +215,16 @@ func useAccount(base, name string, out io.Writer) error {
 	return nil
 }
 
-// activeAccount asks the running proxy which account the shared client is on; empty when it is down.
-func activeAccount() string {
+// proxyActive asks the running proxy which account the shared client is on (empty before its first
+// request); up is false when no proxy answers.
+func proxyActive() (active string, up bool) {
 	resp, err := (&http.Client{Timeout: time.Second}).Get(proxyURL() + "/_status")
 	if err != nil {
-		return ""
+		return "", false
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
-	return activeFromStatus(raw)
+	return activeFromStatus(raw), true
 }
 
 func activeFromStatus(raw []byte) string {

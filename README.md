@@ -74,6 +74,22 @@ limitbreak remove work    # sign it out and delete its login from this machine
 
 Every switch is logged (`~/Library/Logs/limitbreak.log` on macOS, the journal on Linux): the account that ran out, when it resets, and the one now serving.
 
+## See how full each account is
+
+```sh
+limitbreak usage            # the active account: 5-hour and weekly window, % used, when each resets
+limitbreak usage --all      # every account in one table, * marks the active one
+limitbreak usage --json     # the same for scripts (with --all, an array)
+```
+
+```
+  ACCOUNT  EMAIL             5-HOUR  RESETS             WEEKLY  RESETS             WEEKLY BY MODEL
+  default  me@example.com    -       -                  89%     Tue 07:00 (2d8h)   Fable 0%
+* work     work@example.com  17%     Sun 01:20 (2h39m)  3%      Wed 11:00 (3d12h)  -
+```
+
+Claude Code's own `/usage` (like `/status` and the plan in the session header) always shows the default login: those requests carry Claude Code's own credentials, and the proxy passes them through untouched. `limitbreak usage` asks the endpoint `/usage` reads, `GET /api/oauth/usage`, once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
+
 ## Options
 
 `limitbreak serve --port 48617 --upstream https://api.anthropic.com --home ~ --credentials auto|keychain|file`
