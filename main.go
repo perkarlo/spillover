@@ -438,6 +438,10 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, "bad request")
 		return
 	}
+	if isUsageRead(r.Method, path) {
+		p.usageRead(w, r, clientName, path, body)
+		return
+	}
 	if !isInference(path) {
 		p.passThrough(w, r, path, body)
 		return
@@ -458,18 +462,11 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.passThrough(w, r, path, body)
 			return
 		}
-		out, err := http.NewRequestWithContext(r.Context(), r.Method, p.upstream+path, bytes.NewReader(body))
+		out, err := p.onAccount(r, path, body, token)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, "bad path")
 			return
 		}
-		for key, values := range r.Header {
-			if !hopHeaders[http.CanonicalHeaderKey(key)] {
-				out.Header[key] = values
-			}
-		}
-		out.Header.Set("Authorization", "Bearer "+token)
-		out.Header.Set("Accept-Encoding", "identity")
 		resp, err := p.client.Do(out)
 		if err != nil {
 			apiError(w, http.StatusBadGateway, "upstream unreachable")
@@ -522,6 +519,58 @@ func (p *proxy) use(w http.ResponseWriter, r *http.Request) {
 // isInference is a request that spends an account's usage: the messages API.
 func isInference(path string) bool {
 	return strings.HasPrefix(path, "/v1/messages")
+}
+
+// isUsageRead is Claude Code's `/usage` read, whatever its query.
+func isUsageRead(method, path string) bool {
+	bare, _, _ := strings.Cut(path, "?")
+	return method == http.MethodGet && bare == usagePath
+}
+
+// usageRead sends the `/usage` read on the active account, so it answers for the account that is
+// spending; without a live token, or on a 401 or 403, it goes on as Claude Code made it.
+func (p *proxy) usageRead(w http.ResponseWriter, r *http.Request, clientName, path string, body []byte) {
+	token := ""
+	if acc := p.accounts.current(clientName); acc != nil {
+		token = p.accounts.readToken(*acc)
+	}
+	if token == "" {
+		p.passThrough(w, r, path, body)
+		return
+	}
+	out, err := p.onAccount(r, path, body, token)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, "bad path")
+		return
+	}
+	resp, err := p.client.Do(out)
+	if err != nil {
+		apiError(w, http.StatusBadGateway, "upstream unreachable")
+		return
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		p.passThrough(w, r, path, body)
+		return
+	}
+	relay(w, resp)
+}
+
+// onAccount is the request upstream with the account's token in place of Claude Code's credentials.
+func (p *proxy) onAccount(r *http.Request, path string, body []byte, token string) (*http.Request, error) {
+	out, err := http.NewRequestWithContext(r.Context(), r.Method, p.upstream+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	for key, values := range r.Header {
+		if !hopHeaders[http.CanonicalHeaderKey(key)] {
+			out.Header[key] = values
+		}
+	}
+	out.Header.Set("Authorization", "Bearer "+token)
+	out.Header.Set("Accept-Encoding", "identity")
+	return out, nil
 }
 
 // passThrough sends the request upstream exactly as Claude Code made it, with its own credentials.

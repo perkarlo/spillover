@@ -23,7 +23,7 @@ Open a new terminal and run `claude` as usual. When one account's limit is hit, 
 
 ## What it does and does not touch
 
-- Only `/v1/messages*` requests are sent on an account's token. Everything else (claude.ai connectors, MCP, artifacts, profile) goes through untouched with Claude Code's own credentials, so those keep working.
+- Only `/v1/messages*` requests and Claude Code's `/usage` read (`GET /api/oauth/usage`) are sent on an account's token. Everything else (claude.ai connectors, MCP, artifacts, profile) goes through untouched with Claude Code's own credentials, so those keep working.
 - It never sets `CLAUDE_CODE_OAUTH_TOKEN` (that makes Claude Code drop its connectors and local MCP servers).
 - Accounts are the logins Claude Code already holds: the default one plus every `~/.claude-<name>` config directory that has a login. Tokens are read from the macOS Keychain item Claude Code keeps per config dir, or from `<dir>/.credentials.json`. They are never copied, logged, or exposed by `GET /_status`.
 - An expired token is refreshed by running one tiny `claude -p` under that account's directory, so Claude Code stays the only thing that refreshes a login.
@@ -80,7 +80,7 @@ limitbreak usage --json     # the same for scripts (with --all, an array)
 * work     work@example.com  17%     Sun 01:20 (2h39m)  3%      Wed 11:00 (3d12h)  -
 ```
 
-Claude Code's own `/usage` (like `/status` and the plan in the session header) always shows the default login: those requests carry Claude Code's own credentials, and the proxy passes them through untouched. `limitbreak usage` asks the endpoint `/usage` reads, `GET /api/oauth/usage`, once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
+Claude Code's own `/usage` shows the active account: the proxy sends its read, `GET /api/oauth/usage`, on that account's token (with Claude Code's own login when the account has no live token or is refused). So does the extra-usage offer Claude Code shows at a limit, which comes from the same read. `/status` and the plan in the session header still show the default login, because those requests carry Claude Code's own credentials; check which account an offer is for before buying. `limitbreak usage` asks the same endpoint once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
 
 ## Options
 
