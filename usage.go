@@ -14,7 +14,7 @@ import (
 )
 
 // usagePath is where Claude Code's own `/usage` reads how full the bearer's 5-hour and weekly
-// windows are. Asked with an account's own token it answers for that account. Not a documented API.
+// windows are.
 const usagePath = "/api/oauth/usage"
 
 // usageWindow is one usage window of an account: how full it is (percent of its limit) and when it
@@ -72,8 +72,7 @@ func newWindow(percent *float64, resetsAt string) *usageWindow {
 	}
 	w := &usageWindow{Percent: *percent}
 	if t, err := time.Parse(time.RFC3339, resetsAt); err == nil {
-		// The endpoint stamps a reset up to a second off its minute, with the time of the request
-		// (05:59:59.967 or 06:00:00.513 for 06:00).
+		// The endpoint stamps a reset up to a second off its minute.
 		t = t.Round(time.Minute).UTC()
 		w.ResetsAt = &t
 	}
@@ -166,9 +165,8 @@ func usageOf(a *accounts, list []account, base, active string) []accountUsage {
 	return rows
 }
 
-// pickActive is the account the shared client's next request goes on: the proxy's choice, else (the
-// proxy is stopped or has not served yet) the first account, which is the default login when there
-// is one.
+// pickActive is the account the shared client's next request goes on: the proxy's choice, else the
+// first account (the default login when there is one).
 func pickActive(list []account, proxyChoice string) string {
 	for _, acc := range list {
 		if acc.ID == proxyChoice {

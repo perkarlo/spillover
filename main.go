@@ -1,25 +1,5 @@
-// limitbreak: one `claude` install, several logins, switched without a restart.
-//
-// Run it on a host (Mac or Linux) and start Claude Code with
-//
-//	ANTHROPIC_BASE_URL=http://127.0.0.1:48617
-//
-// Claude Code keeps its own login (so its MCP servers, connectors and artifacts keep working).
-// Every messages request goes to Anthropic with the active account's own access token. When Anthropic
-// answers 429 with `anthropic-ratelimit-unified-status: rejected` (the account's 5-hour or weekly
-// window is spent) the account is recorded spent until `anthropic-ratelimit-unified-reset` and the
-// same request is sent again on the next account, before any reply reaches Claude. The session and
-// its history never change.
-//
-// Accounts are the logins Claude Code already holds on the host: the default one and every
-// `~/.claude-<name>` config dir with a login. Tokens are read, never copied or logged: from the
-// macOS Keychain item Claude Code keeps per config dir, or from `<dir>/.credentials.json`. An
-// expired token is refreshed by running one tiny `claude -p` under that dir, so Claude Code stays
-// the only thing that refreshes a login.
-//
-// A path may start with a client name (`/_c/<client>/v1/messages`); each client has its own active
-// account. Any other path is the shared client's. Requests that are not the messages API are
-// forwarded untouched with Claude Code's own credentials. `GET /_status` lists the accounts.
+// Command limitbreak is a local proxy that sends Claude Code's messages requests on several logins
+// and moves to the next one when an account's usage window is spent. Rules and reasons: CLAUDE.md.
 package main
 
 import (
@@ -68,8 +48,7 @@ var hopHeaders = map[string]bool{
 
 // MARK: Decisions (pure)
 
-// spentReset reports whether a reply is a spent window, and when it lifts (zero when unsaid). A
-// plain rate limit (429 without the unified status) clears in seconds and goes back untouched.
+// spentReset reports whether a reply is a spent window, and when it lifts (zero when unsaid).
 func spentReset(status int, h http.Header) (spent bool, reset time.Time) {
 	if status != http.StatusTooManyRequests || !strings.EqualFold(h.Get(spentHeader), "rejected") {
 		return false, time.Time{}
@@ -230,14 +209,12 @@ func keychainQueries(configDir string) [][]string {
 	return queries
 }
 
-// credentialSources are the credential documents Claude Code may hold for a login: its Keychain
-// item and its file. Either can be the stale leftover of an older sign-in, so every one is read.
+// credentialSources are every credential document Claude Code may hold for a login: its Keychain
+// items and its file.
 func (a *accounts) credentialSources(configDir, path string) [][]byte {
 	var sources [][]byte
 	if a.credentials == credentialsKeychain {
-		// Claude Code files its item under the user's name; other items with the same service
-		// (an older sign-in under another account name) can be stale, so the user's is asked for
-		// first and any other is kept as a second source.
+		// The user's own item first, then any other under the same service.
 		for _, args := range keychainQueries(configDir) {
 			out, err := exec.Command("security", args...).Output()
 			if err == nil && len(bytes.TrimSpace(out)) > 0 {
@@ -366,8 +343,8 @@ func (a *accounts) spend(client, id string, until time.Time) *account {
 	return usable
 }
 
-// use makes id the client's active account; false when no such login is signed in. A chosen
-// account loses its spent mark: if its window is still spent, the next reply says so again.
+// use makes id the client's active account and clears its spent mark; false when no such login
+// is signed in.
 func (a *accounts) use(client, id string) bool {
 	list := a.list()
 	a.mu.Lock()
@@ -513,7 +490,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // use answers `POST /_use {"id": "<account>", "client": "<client>"}` (client defaults to the shared
-// one). JSON only and answered here, preflight included, so a web page cannot switch accounts.
+// one), JSON only.
 func (p *proxy) use(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		apiError(w, http.StatusMethodNotAllowed, "POST only")
@@ -542,11 +519,7 @@ func (p *proxy) use(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(p.accounts.status())
 }
 
-// A proxy that cannot place a request on an account sends it on as Claude Code made it: it is
-// never worse than no proxy.
-
-// isInference is a request that spends an account's usage: the messages API. Everything else
-// (claude.ai connectors, profile, MCP, artifacts) belongs to the login Claude Code itself holds.
+// isInference is a request that spends an account's usage: the messages API.
 func isInference(path string) bool {
 	return strings.HasPrefix(path, "/v1/messages")
 }

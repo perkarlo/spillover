@@ -46,7 +46,9 @@ Then add the printed line to `~/.zshrc` or `~/.bashrc`:
 source "$HOME/.local/bin/limitbreak-shell.sh"
 ```
 
-That defines a `claude` function that points Claude Code at the proxy when it is running and runs plain `claude` when it is not. Use `./install.sh --binary <prebuilt>` on a host without Go.
+That defines a `claude` function that points Claude Code at the proxy when it is running and runs plain `claude` when it is not.
+
+On a host without Go, build elsewhere (`GOOS=linux GOARCH=amd64 go build -o limitbreak .`) or take a release binary, copy it with `install.sh` and `shell.sh` to the host, and run `./install.sh --binary <path>`. `./install.sh --dry-run` prints what it would do.
 
 ## Add accounts
 
@@ -102,8 +104,10 @@ Then remove `~/.local/bin/limitbreak*` and the `source` line from your shell pro
 ## Develop
 
 ```sh
-go vet ./... && go test ./...
+go vet ./... && test -z "$(gofmt -l .)" && go test ./... && ./.github/checks.sh
 ```
+
+The rules for changing the code, and the reasons behind them, are in [CLAUDE.md](CLAUDE.md).
 
 ## License
 

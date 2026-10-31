@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Installs the limitbreak as a login service for this user (launchd on macOS, a systemd
-# user unit on Linux) and prints the one line that points `claude` at it.
-#   install-limitbreak.sh [--dry-run] [--binary <prebuilt limitbreak>]
-# Without --binary it is built from this directory (needs Go). For a host without Go, build
-# elsewhere (GOOS=linux GOARCH=amd64 go build -o limitbreak .), copy the binary, this
-# script and shell.sh to the host, and pass --binary.
+# Installs limitbreak as this user's login service (launchd on macOS, systemd user unit on Linux).
+# Usage: ./install.sh [--dry-run] [--binary <prebuilt limitbreak>]
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

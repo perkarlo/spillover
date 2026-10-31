@@ -1,5 +1,5 @@
-# Source this from ~/.zshrc or ~/.bashrc. `claude` then goes through the account proxy when it is
-# running on this host, and runs as before when it is not.
+# shellcheck shell=bash
+# Source this from ~/.zshrc or ~/.bashrc: `claude` goes through the proxy when it runs, plainly when not.
 claude() {
   local port="${LIMITBREAK_PORT:-48617}"
   if curl -s -m 1 -o /dev/null "http://127.0.0.1:${port}/_status"; then
