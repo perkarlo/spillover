@@ -23,7 +23,6 @@ limitbreak use <name>           send requests on this account from now on (until
 limitbreak usage [--all] [--json]
                                 how full the active account (or every account) is, and when it resets
 limitbreak remove <name> [-y]   sign an account out and delete its login
-limitbreak video                watch a switch happen as an arcade battle (simulated, no real login touched)
 
 The default account is the one plain "claude auth login" signs in.`
 
@@ -46,8 +45,6 @@ func runCommand(command string, args []string) int {
 			name = args[0]
 		}
 		err = addAccount(a, name, loginAs(a), os.Stdout)
-	case "video":
-		err = runVideo(os.Stdout)
 	case "list":
 		listAccounts(a, os.Stdout)
 	case "use":

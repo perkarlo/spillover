@@ -1,13 +1,5 @@
 # limitbreak
 
-<p align="center"><img src="assets/limitbreak.gif" alt="Arcade-style battle: an account's limit gauge fills, LIMIT BREAK, the next account takes over" width="640"></p>
-
-```
-   ★ L I M I T   B R E A K ★
-   ADA    [██████████] LIMIT   → spent
-   GRACE  [░░░░░░░░░░] ready   → takes the hit
-```
-
 Use several Claude accounts from **one** Claude Code install, and switch between them automatically when an account's usage limit is hit, without restarting the session or losing its history.
 
 A small local proxy (a single Go binary, standard library only, a few MB of RAM) sits between `claude` and Anthropic's API. It sends each request on the active account's own login. When Anthropic answers that the account's 5-hour or weekly window is spent, the proxy remembers that account until its reset time and **replays the same request on the next account** before Claude Code ever sees the error. To the session nothing happened.
@@ -17,8 +9,6 @@ claude ──ANTHROPIC_BASE_URL──▶ proxy 127.0.0.1:48617 ──▶ api.ant
                                  │  active account's token
                                  └─ 429 "rejected"? mark spent, retry on the next account
 ```
-
-Try it without touching any real login: `limitbreak video` plays a simulated switch in your terminal as a little arcade battle.
 
 ## Quick start
 
