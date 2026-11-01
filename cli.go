@@ -16,13 +16,13 @@ import (
 	"time"
 )
 
-const usage = `limitbreak [serve flags]        run the proxy (default)
-limitbreak add [name]           sign in a new account (opens the browser)
-limitbreak list                 show the accounts
-limitbreak use <name>           send requests on this account from now on (until it is spent)
-limitbreak usage [--all] [--json]
+const usage = `spillover [serve flags]        run the proxy (default)
+spillover add [name]           sign in a new account (opens the browser)
+spillover list                 show the accounts
+spillover use <name>           send requests on this account from now on (until it is spent)
+spillover usage [--all] [--json]
                                 how full the active account (or every account) is, and when it resets
-limitbreak remove <name> [-y]   sign an account out and delete its login
+spillover remove <name> [-y]   sign an account out and delete its login
 
 The default account is the one plain "claude auth login" signs in.`
 
@@ -49,18 +49,18 @@ func runCommand(command string, args []string) int {
 		listAccounts(a, os.Stdout)
 	case "use":
 		if len(args) != 1 {
-			fmt.Fprintln(os.Stderr, "usage: limitbreak use <name>")
+			fmt.Fprintln(os.Stderr, "usage: spillover use <name>")
 			return 2
 		}
 		err = useAccount(proxyURL(), args[0], os.Stdout)
 	case "usage":
 		q, ok := usageFlags(args)
 		if !ok {
-			fmt.Fprintln(os.Stderr, "usage: limitbreak usage [--all] [--json]")
+			fmt.Fprintln(os.Stderr, "usage: spillover usage [--all] [--json]")
 			return 2
 		}
 		q.proxyChoice, q.proxyUp = proxyActive()
-		err = showUsage(a, envString("LIMITBREAK_UPSTREAM", "https://api.anthropic.com"), q, os.Stdout)
+		err = showUsage(a, envString("SPILLOVER_UPSTREAM", "https://api.anthropic.com"), q, os.Stdout)
 	case "remove":
 		err = removeAccount(a, args, os.Stdin, os.Stdout)
 	default:
@@ -154,7 +154,7 @@ func addAccount(a *accounts, name string, login func(dir string) error, out io.W
 	fmt.Fprintf(out, "Added %s (%s). %d accounts now.\n", name, who, len(list))
 	for _, other := range list {
 		if other.ID != name && added.Email != "" && other.Email == added.Email {
-			fmt.Fprintf(out, "Warning: %s is the same login as %q; two entries for one account do not add capacity. `limitbreak remove %s` drops it.\n", added.Email, other.ID, name)
+			fmt.Fprintf(out, "Warning: %s is the same login as %q; two entries for one account do not add capacity. `spillover remove %s` drops it.\n", added.Email, other.ID, name)
 		}
 	}
 	return nil
@@ -163,7 +163,7 @@ func addAccount(a *accounts, name string, login func(dir string) error, out io.W
 func listAccounts(a *accounts, out io.Writer) {
 	list := freshAccounts(a)
 	if len(list) == 0 {
-		fmt.Fprintln(out, "No accounts signed in. Run `claude auth login` (default) or `limitbreak add`.")
+		fmt.Fprintln(out, "No accounts signed in. Run `claude auth login` (default) or `spillover add`.")
 		return
 	}
 	active, up := proxyActive()
@@ -182,12 +182,12 @@ func listAccounts(a *accounts, out io.Writer) {
 		fmt.Fprintf(out, "%s %-16s %s\n", mark, acc.ID, email)
 	}
 	if !up {
-		fmt.Fprintln(out, "(proxy not running: start it with the installed service, or `limitbreak`)")
+		fmt.Fprintln(out, "(proxy not running: start it with the installed service, or `spillover`)")
 	}
 }
 
 func proxyURL() string {
-	return fmt.Sprintf("http://127.0.0.1:%d", envInt("LIMITBREAK_PORT", defaultPort))
+	return fmt.Sprintf("http://127.0.0.1:%d", envInt("SPILLOVER_PORT", defaultPort))
 }
 
 // useAccount tells the running proxy to send the shared client's requests on the named account.
@@ -195,7 +195,7 @@ func useAccount(base, name string, out io.Writer) error {
 	body, _ := json.Marshal(map[string]string{"id": name})
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Post(base+"/_use", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("proxy not running: start it with the installed service, or `limitbreak`")
+		return fmt.Errorf("proxy not running: start it with the installed service, or `spillover`")
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
@@ -251,7 +251,7 @@ func removeAccount(a *accounts, args []string, in io.Reader, out io.Writer) erro
 		}
 	}
 	if name == "" {
-		return fmt.Errorf("usage: limitbreak remove <name> [-y]")
+		return fmt.Errorf("usage: spillover remove <name> [-y]")
 	}
 	if name == defaultID {
 		return fmt.Errorf(`the default account is Claude Code's own login; sign out with "claude auth logout"`)

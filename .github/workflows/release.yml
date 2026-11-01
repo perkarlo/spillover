@@ -18,9 +18,9 @@ jobs:
           mkdir dist
           for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
             os=${target%/*}; arch=${target#*/}
-            GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/limitbreak .
-            tar -C dist -czf "dist/limitbreak_${GITHUB_REF_NAME}_${os}_${arch}.tar.gz" limitbreak
-            rm dist/limitbreak
+            GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/spillover .
+            tar -C dist -czf "dist/spillover_${GITHUB_REF_NAME}_${os}_${arch}.tar.gz" spillover
+            rm dist/spillover
           done
           (cd dist && shasum -a 256 *.tar.gz > checksums.txt)
       - env:

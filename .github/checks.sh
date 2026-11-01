@@ -71,11 +71,11 @@ fi
 
 # ─── 5. The port is the same in code, shell function and docs ────────────────
 port=$(sed -n 's/^[[:space:]]*defaultPort[[:space:]]*= \([0-9][0-9]*\)$/\1/p' main.go)
-shell_port=$(sed -n 's/.*LIMITBREAK_PORT:-\([0-9][0-9]*\)}.*/\1/p' shell.sh)
+shell_port=$(sed -n 's/.*SPILLOVER_PORT:-\([0-9][0-9]*\)}.*/\1/p' shell.sh)
 if [ -z "$port" ]; then
   fail "defaultPort not found in main.go" "Did the constant block change?"
 elif [ "$port" != "$shell_port" ]; then
-  fail "shell.sh defaults to port ${shell_port:-?}, main.go to ${port}" "Keep LIMITBREAK_PORT's default in shell.sh equal to defaultPort."
+  fail "shell.sh defaults to port ${shell_port:-?}, main.go to ${port}" "Keep SPILLOVER_PORT's default in shell.sh equal to defaultPort."
 elif grep -q "$port" README.md && grep -q "$port" CLAUDE.md; then
   ok "port ${port} agrees in main.go, shell.sh, README and CLAUDE.md"
 else
@@ -95,8 +95,8 @@ fi
 
 # ─── 7. Commands: runCommand, the usage text and README agree ────────────────
 cases=$(awk '/^func runCommand/,/^}/' cli.go | sed -n 's/^[[:space:]]*case "\([a-z]*\)":.*/\1/p' | sort -u)
-in_usage=$(awk '/^const usage = /,/`$/' cli.go | sed -n 's/^\(const usage = `\)\{0,1\}limitbreak \([a-z][a-z]*\).*/\2/p' | sort -u)
-in_readme=$(grep -oE 'limitbreak [a-z]+' README.md | awk '{print $2}' | sort -u)
+in_usage=$(awk '/^const usage = /,/`$/' cli.go | sed -n 's/^\(const usage = `\)\{0,1\}spillover \([a-z][a-z]*\).*/\2/p' | sort -u)
+in_readme=$(grep -oE 'spillover [a-z]+' README.md | awk '{print $2}' | sort -u)
 missing_usage=$(comm -23 <(echo "$cases" | grep -vx serve) <(echo "$in_usage") | tr '\n' ' ')
 extra_usage=$(comm -13 <(echo "$cases") <(echo "$in_usage") | tr '\n' ' ')
 missing_readme=$(comm -23 <(echo "$cases") <(echo "$in_readme") | tr '\n' ' ')

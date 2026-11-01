@@ -5,17 +5,17 @@ of rules, contracts and the reasons behind them.
 
 ## Project
 
-limitbreak lets one Claude Code install use several Claude logins. A local proxy sends each
+spillover lets one Claude Code install use several Claude logins. A local proxy sends each
 messages request on the active account's own token; when Anthropic says that account's 5-hour or
 weekly window is spent, it replays the same request on the next account before Claude Code sees
-the error. One Go binary, standard library only, is both the proxy (`limitbreak`, `limitbreak
-serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT).
+the error. One Go binary, standard library only, is both the proxy (`spillover`, `spillover
+serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT); named limitbreak until DEV-923.
 
 ```
 .
 ├── main.go          # proxy: routing, account discovery, tokens, switching, /_status and /_use
 ├── cli.go           # commands add, list, use, remove and the usage text
-├── usage.go         # `limitbreak usage`: each account's windows from /api/oauth/usage
+├── usage.go         # `spillover usage`: each account's windows from /api/oauth/usage
 ├── *_test.go        # tests against stand-in upstreams in temp home dirs
 ├── install.sh       # builds or installs the binary, writes the launchd / systemd user service
 ├── shell.sh         # the `claude` function: through the proxy when it runs, plain when not
@@ -29,7 +29,7 @@ serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT).
 
 **After every change, run:** `go vet ./... && test -z "$(gofmt -l .)" && go test ./... && ./.github/checks.sh`
 
-Then `./install.sh` puts the build in service. The restart forgets `limitbreak use`: pick the
+Then `./install.sh` puts the build in service. The restart forgets `spillover use`: pick the
 account again if it was not the default.
 
 ## Invariants
@@ -41,7 +41,7 @@ Deliberate decisions. Before changing one, read why it is here.
 | 1 | A token never reaches output, a log line, an error message or `/_status` | Tokens are read in place from Claude Code's own store; whoever sees one holds the account. `account.Dir` and `Path` are `json:"-"`, `readUsage` masks a token the server echoes |
 | 2 | Only `/v1/messages*` and the `/usage` read (`GET /api/oauth/usage`, any query) go on an account's token; every other path passes through with Claude Code's own credentials | Connectors, MCP, artifacts and the profile belong to the login Claude Code holds; moving them breaks them or mixes two accounts in one session. The usage read follows the account that is spending (DEV-922) |
 | 3 | `CLAUDE_CODE_OAUTH_TOKEN` is never set for Claude Code | With it Claude Code drops its claude.ai connectors and local MCP servers |
-| 4 | Only Claude Code refreshes a login: one `claude -p` under that config dir. limitbreak never writes a credential | Refresh tokens rotate; a second refresher logs Claude Code out |
+| 4 | Only Claude Code refreshes a login: one `claude -p` under that config dir. spillover never writes a credential | Refresh tokens rotate; a second refresher logs Claude Code out |
 | 5 | Never worse than no proxy: when no account can take a request, it goes on as Claude Code made it | The proxy sits in front of every session; its failure must cost nothing. `shell.sh` runs plain `claude` when the proxy is down |
 | 6 | Only a window rejection switches: `429` with `anthropic-ratelimit-unified-status: rejected` | A plain 429 clears in seconds and goes back to Claude Code untouched |
 | 7 | `/_use` takes JSON only and the proxy answers it, preflight included | A web page can POST a form to localhost but not JSON without a preflight, so no page can switch accounts |
@@ -97,9 +97,9 @@ The long reason behind short lines in the code. Read before simplifying one away
 | `removeAccount` | `default` refused | It is Claude Code's own login; `claude auth logout` signs it out |
 | `newWindow` | reset rounded to the minute | The endpoint stamps a reset up to a second off (05:59:59.967 or 06:00:00.513 for 06:00) |
 | `usagePath` | `/api/oauth/usage` | The endpoint Claude Code's `/usage` reads; not a documented API, it may change |
-| `install.sh` | old labels booted out and removed | Earlier builds ran as `com.hicomputers.claude-account-proxy` and `dev.claude-account-proxy`; two services would fight for the port |
+| `install.sh` | old labels and units booted out and removed | Earlier builds ran as `com.hicomputers.claude-account-proxy`, `dev.claude-account-proxy` and `dev.limitbreak`; two services would fight for the port |
 | `install.sh` | `sleep 1` after `launchctl bootout` | Bootstrapping while the old job is still going away fails |
-| `install.sh` | the old `claude-account-proxy-shell.sh` becomes a one-line shim | A profile line from an earlier build keeps working |
+| `install.sh` | old binaries removed; `claude-account-proxy-shell.sh` and `limitbreak-shell.sh` become one-line shims | A profile line from an earlier build keeps working |
 | `shell.sh` | `curl -m 1` on `/_status` | A stopped proxy costs at most a second before plain `claude` runs |
 | `ci.yml` | Go 1.24 | Go 1.22 test binaries abort on current macOS runners; `go.mod` stays at 1.22 |
 
@@ -116,5 +116,5 @@ The long reason behind short lines in the code. Read before simplifying one away
 | File added or removed | the tree at the top | no |
 | Run line | the "After every change" line and `ci.yml`, same commands | yes, checks.sh |
 
-The default port is 48617 and the launchd label `dev.limitbreak`; `checks.sh` holds both to the
+The default port is 48617 and the launchd label `co.birtik.spillover`; `checks.sh` holds both to the
 code. CI runs no real login: a switch on live accounts is still checked by hand after `./install.sh`.

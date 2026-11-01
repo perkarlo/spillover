@@ -1,4 +1,4 @@
-# limitbreak
+# spillover
 
 Use several Claude accounts from **one** Claude Code install, and switch between them automatically when an account's usage limit is hit, without restarting the session or losing its history.
 
@@ -13,10 +13,10 @@ claude ──ANTHROPIC_BASE_URL──▶ proxy 127.0.0.1:48617 ──▶ api.ant
 ## Quick start
 
 ```sh
-git clone https://github.com/radu2lupu/limitbreak && cd limitbreak
+git clone https://github.com/birtikco/spillover && cd spillover
 ./install.sh                                   # builds and starts the background service
-echo 'source "$HOME/.local/bin/limitbreak-shell.sh"' >> ~/.zshrc   # or ~/.bashrc
-limitbreak add                       # sign in another account (browser), repeat per account
+echo 'source "$HOME/.local/bin/spillover-shell.sh"' >> ~/.zshrc   # or ~/.bashrc
+spillover add                       # sign in another account (browser), repeat per account
 ```
 
 Open a new terminal and run `claude` as usual. When one account's limit is hit, the next one answers.
@@ -35,43 +35,43 @@ Open a new terminal and run `claude` as usual. When one account's limit is hit, 
 Needs Go 1.22+ to build, macOS or Linux. Prebuilt binaries are attached to each [release](../../releases).
 
 ```sh
-git clone https://github.com/radu2lupu/limitbreak
-cd limitbreak
-./install.sh          # builds, installs ~/.local/bin/limitbreak, starts a launchd / systemd user service
+git clone https://github.com/birtikco/spillover
+cd spillover
+./install.sh          # builds, installs ~/.local/bin/spillover, starts a launchd / systemd user service
 ```
 
 Then add the printed line to `~/.zshrc` or `~/.bashrc`:
 
 ```sh
-source "$HOME/.local/bin/limitbreak-shell.sh"
+source "$HOME/.local/bin/spillover-shell.sh"
 ```
 
 That defines a `claude` function that points Claude Code at the proxy when it is running and runs plain `claude` when it is not.
 
-On a host without Go, build elsewhere (`GOOS=linux GOARCH=amd64 go build -o limitbreak .`) or take a release binary, copy it with `install.sh` and `shell.sh` to the host, and run `./install.sh --binary <path>`. `./install.sh --dry-run` prints what it would do.
+On a host without Go, build elsewhere (`GOOS=linux GOARCH=amd64 go build -o spillover .`) or take a release binary, copy it with `install.sh` and `shell.sh` to the host, and run `./install.sh --binary <path>`. `./install.sh --dry-run` prints what it would do.
 
 ## Add accounts
 
 ```sh
-limitbreak add            # signs in a new account in your browser, names it account-N
-limitbreak add work       # or pick the name
-limitbreak list           # accounts, who they are, which one is active (*)
-limitbreak use work       # send requests on this account from now on, until it is spent
-limitbreak remove work    # sign it out and delete its login from this machine
+spillover add            # signs in a new account in your browser, names it account-N
+spillover add work       # or pick the name
+spillover list           # accounts, who they are, which one is active (*)
+spillover use work       # send requests on this account from now on, until it is spent
+spillover remove work    # sign it out and delete its login from this machine
 ```
 
 `add` runs Claude Code's own browser sign-in into its own config directory (`~/.claude-<name>`), checks the login landed, tells you which email it is, and warns if you added the same account twice. The running proxy picks it up within 30 seconds; no restart. The default account is whatever plain `claude auth login` signs in. Raw status for scripts: `curl -s http://127.0.0.1:48617/_status`; its `served` field counts the messages replies each account gave since the proxy started.
 
 `use` switches running sessions on their next request, no restart. The choice lives in the proxy's memory: a restart goes back to the default account. Scripts can send `POST /_use` with `{"id": "work"}` (and `"client"` for a `/_c/<client>/` prefix); the endpoint takes JSON only, so a web page cannot switch accounts.
 
-Every switch is logged (`~/Library/Logs/limitbreak.log` on macOS, the journal on Linux): the account that ran out, when it resets, and the one now serving.
+Every switch is logged (`~/Library/Logs/spillover.log` on macOS, the journal on Linux): the account that ran out, when it resets, and the one now serving.
 
 ## See how full each account is
 
 ```sh
-limitbreak usage            # the active account: 5-hour and weekly window, % used, when each resets
-limitbreak usage --all      # every account in one table, * marks the active one
-limitbreak usage --json     # the same for scripts (with --all, an array)
+spillover usage            # the active account: 5-hour and weekly window, % used, when each resets
+spillover usage --all      # every account in one table, * marks the active one
+spillover usage --json     # the same for scripts (with --all, an array)
 ```
 
 ```
@@ -80,11 +80,11 @@ limitbreak usage --json     # the same for scripts (with --all, an array)
 * work     work@example.com  17%     Sun 01:20 (2h39m)  3%      Wed 11:00 (3d12h)  -
 ```
 
-Claude Code's own `/usage` shows the active account: the proxy sends its read, `GET /api/oauth/usage`, on that account's token (with Claude Code's own login when the account has no live token or is refused). So does the extra-usage offer Claude Code shows at a limit, which comes from the same read. `/status` and the plan in the session header still show the default login, because those requests carry Claude Code's own credentials; check which account an offer is for before buying. `limitbreak usage` asks the same endpoint once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
+Claude Code's own `/usage` shows the active account: the proxy sends its read, `GET /api/oauth/usage`, on that account's token (with Claude Code's own login when the account has no live token or is refused). So does the extra-usage offer Claude Code shows at a limit, which comes from the same read. `/status` and the plan in the session header still show the default login, because those requests carry Claude Code's own credentials; check which account an offer is for before buying. `spillover usage` asks the same endpoint once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
 
 ## Options
 
-`limitbreak serve --port 48617 --upstream https://api.anthropic.com --home ~ --credentials auto|keychain|file`
+`spillover serve --port 48617 --upstream https://api.anthropic.com --home ~ --credentials auto|keychain|file`
 
 A request path may begin with `/_c/<client>/` to give a client (an agent, a tool) its own active account; the prefix is stripped before forwarding.
 
@@ -97,9 +97,9 @@ A request path may begin with `/_c/<client>/` to give a client (an agent, a tool
 
 ## Uninstall
 
-macOS: `launchctl bootout gui/$(id -u)/dev.limitbreak; rm ~/Library/LaunchAgents/dev.limitbreak.plist`.
-Linux: `systemctl --user disable --now limitbreak`.
-Then remove `~/.local/bin/limitbreak*` and the `source` line from your shell profile. Accounts you added stay as ordinary `~/.claude-<name>` logins; `limitbreak remove <name>` deletes one.
+macOS: `launchctl bootout gui/$(id -u)/co.birtik.spillover; rm ~/Library/LaunchAgents/co.birtik.spillover.plist`.
+Linux: `systemctl --user disable --now spillover`.
+Then remove `~/.local/bin/spillover*` and the `source` line from your shell profile. Accounts you added stay as ordinary `~/.claude-<name>` logins; `spillover remove <name>` deletes one.
 
 ## Develop
 
@@ -111,4 +111,4 @@ The rules for changing the code, and the reasons behind them, are in [CLAUDE.md]
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Forked from [radu2lupu/limitbreak](https://github.com/radu2lupu/limitbreak).

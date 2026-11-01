@@ -25,7 +25,7 @@ type usageWindow struct {
 	ResetsAt *time.Time `json:"resetsAt"`
 }
 
-// accountUsage is one account's row in `limitbreak usage`. A nil window is one the reply did not
+// accountUsage is one account's row in `spillover usage`. A nil window is one the reply did not
 // carry.
 type accountUsage struct {
 	ID       string        `json:"id"`
@@ -37,7 +37,7 @@ type accountUsage struct {
 	Error    string        `json:"error,omitempty"`
 }
 
-// usageReply is the part of the usage endpoint's answer limitbreak reads.
+// usageReply is the part of the usage endpoint's answer spillover reads.
 type usageReply struct {
 	FiveHour *replyWindow `json:"five_hour"`
 	SevenDay *replyWindow `json:"seven_day"`
@@ -95,7 +95,7 @@ func readUsage(client *http.Client, base, token string) (accountUsage, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
-	req.Header.Set("User-Agent", "limitbreak")
+	req.Header.Set("User-Agent", "spillover")
 	resp, err := client.Do(req)
 	if err != nil {
 		return accountUsage{}, fmt.Errorf("usage endpoint unreachable: %s", hide(err.Error()))
@@ -179,7 +179,7 @@ func pickActive(list []account, proxyChoice string) string {
 	return ""
 }
 
-// usageQuery is what `limitbreak usage` was asked for, and what the proxy said.
+// usageQuery is what `spillover usage` was asked for, and what the proxy said.
 type usageQuery struct {
 	all, json bool
 	// proxyChoice is the proxy's active account: empty when it is stopped or has not served yet.
@@ -208,7 +208,7 @@ const proxyDownNote = "(proxy not running: plain `claude` uses the default accou
 func showUsage(a *accounts, base string, q usageQuery, out io.Writer) error {
 	list := freshAccounts(a)
 	if len(list) == 0 {
-		return fmt.Errorf("no accounts signed in; run `claude auth login` (default) or `limitbreak add`")
+		return fmt.Errorf("no accounts signed in; run `claude auth login` (default) or `spillover add`")
 	}
 	active := pickActive(list, q.proxyChoice)
 	if !q.all {

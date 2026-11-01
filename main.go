@@ -1,4 +1,4 @@
-// Command limitbreak is a local proxy that sends Claude Code's messages requests on several logins
+// Command spillover is a local proxy that sends Claude Code's messages requests on several logins
 // and moves to the next one when an account's usage window is spent. Rules and reasons: CLAUDE.md.
 package main
 
@@ -635,8 +635,8 @@ func main() {
 
 func serve(args []string) {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)
-	port := flags.Int("port", envInt("LIMITBREAK_PORT", defaultPort), "port to listen on (loopback only)")
-	upstream := flags.String("upstream", envString("LIMITBREAK_UPSTREAM", "https://api.anthropic.com"), "Anthropic API address")
+	port := flags.Int("port", envInt("SPILLOVER_PORT", defaultPort), "port to listen on (loopback only)")
+	upstream := flags.String("upstream", envString("SPILLOVER_UPSTREAM", "https://api.anthropic.com"), "Anthropic API address")
 	home, _ := os.UserHomeDir()
 	homeFlag := flags.String("home", home, "home dir holding the Claude logins")
 	credentials := flags.String("credentials", "auto", "auto, keychain or file")
@@ -645,7 +645,7 @@ func serve(args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("limitbreak listening on http://%s", listener.Addr())
+	log.Printf("spillover listening on http://%s", listener.Addr())
 	log.Fatal(http.Serve(listener, newProxy(newAccounts(*homeFlag, *credentials, ""), *upstream)))
 }
 

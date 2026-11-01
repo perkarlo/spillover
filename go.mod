@@ -1,3 +1,3 @@
-module github.com/radu2lupu/limitbreak
+module github.com/birtikco/spillover
 
 go 1.22

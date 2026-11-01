@@ -15,7 +15,7 @@ import (
 )
 
 // The replies below are shaped like ones measured from the live endpoint on 2026-10-31 (fields
-// limitbreak does not read are trimmed).
+// spillover does not read are trimmed).
 const (
 	proUsage = `{"five_hour": {"utilization": 12.0, "resets_at": "2026-11-01T00:20:00.027961+00:00"},
 		"seven_day": {"utilization": 2.0, "resets_at": "2026-11-04T10:00:00.027981+00:00"},
