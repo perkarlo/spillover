@@ -23,7 +23,7 @@ Open a new terminal and run `claude` as usual. When one account's limit is hit, 
 
 ## What it does and does not touch
 
-- Only `/v1/messages*` requests and Claude Code's `/usage` read (`GET /api/oauth/usage`) are sent on an account's token. Everything else (claude.ai connectors, MCP, artifacts, profile) goes through untouched with Claude Code's own credentials, so those keep working.
+- Only `/v1/messages*` requests are sent on an account's token. Anything else that reaches the proxy goes on untouched with Claude Code's own credentials, and most of Claude Code's other traffic (claude.ai connectors, MCP, artifacts, profile, `/usage`) goes to Anthropic directly without passing the proxy, so all of it stays on the login Claude Code holds.
 - It never sets `CLAUDE_CODE_OAUTH_TOKEN` (that makes Claude Code drop its connectors and local MCP servers).
 - Accounts are the logins Claude Code already holds: the default one plus every `~/.claude-<name>` config directory that has a login. Tokens are read from the macOS Keychain item Claude Code keeps per config dir, or from `<dir>/.credentials.json`. They are never copied, logged, or exposed by `GET /_status`.
 - An expired token is refreshed by running one tiny `claude -p` under that account's directory, so Claude Code stays the only thing that refreshes a login.
@@ -80,7 +80,32 @@ spillover usage --json     # the same for scripts (with --all, an array)
 * work     work@example.com  17%     Sun 01:20 (2h39m)  3%      Wed 11:00 (3d12h)  -
 ```
 
-Claude Code's own `/usage` shows the active account: the proxy sends its read, `GET /api/oauth/usage`, on that account's token (with Claude Code's own login when the account has no live token or is refused). So does the extra-usage offer Claude Code shows at a limit, which comes from the same read. `/status` and the plan in the session header still show the default login, because those requests carry Claude Code's own credentials; check which account an offer is for before buying. `spillover usage` asks the same endpoint once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
+`spillover usage` asks Anthropic's usage endpoint (`GET /api/oauth/usage`) once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
+
+Claude Code's own `/usage`, `/status` and the plan in the session header always show Claude Code's own login (the default): Claude Code sends those reads to `https://api.anthropic.com` itself, not through `ANTHROPIC_BASE_URL`, so they never reach the proxy. The extra-usage offer Claude Code shows at a limit comes from the same read, so it is for the default login whichever account is active; check which account an offer is for before buying.
+
+### In Claude Code's status line
+
+`spillover statusline` prints the session's account and how full its windows are, for Claude Code's status line:
+
+```
+work 5h 17% · wk 3%
+```
+
+The numbers are the `rate_limits` Claude Code hands its status line, read from the headers of the session's last reply. The proxy relayed that reply from the account that answered it, so they are that account's, and no extra request is made. The name is the account the proxy has chosen for the session (with a `/_c/<client>/` base URL, that client's). It prints nothing when the session does not go through the proxy, and `spillover: not running` when the proxy it points at is stopped. After `spillover use`, the numbers follow on the session's next reply.
+
+Use it as the whole status line in `~/.claude/settings.json`:
+
+```json
+"statusLine": {"type": "command", "command": "~/.local/bin/spillover statusline"}
+```
+
+or call it from your own status line script, which gets the same input on stdin:
+
+```sh
+input=$(cat)
+account=$(printf '%s' "$input" | ~/.local/bin/spillover statusline)
+```
 
 ## Options
 

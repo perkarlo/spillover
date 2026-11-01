@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 )
@@ -22,6 +23,7 @@ spillover list                 show the accounts
 spillover use <name>           send requests on this account from now on (until it is spent)
 spillover usage [--all] [--json]
                                 how full the active account (or every account) is, and when it resets
+spillover statusline           for Claude Code's status line: the session's account and how full it is
 spillover remove <name> [-y]   sign an account out and delete its login
 
 The default account is the one plain "claude auth login" signs in.`
@@ -61,6 +63,16 @@ func runCommand(command string, args []string) int {
 		}
 		q.proxyChoice, q.proxyUp = proxyActive()
 		err = showUsage(a, envString("SPILLOVER_UPSTREAM", "https://api.anthropic.com"), q, os.Stdout)
+	case "statusline":
+		if len(args) != 0 {
+			fmt.Fprintln(os.Stderr, "usage: spillover statusline (reads Claude Code's status line input on stdin)")
+			return 2
+		}
+		var in io.Reader = os.Stdin
+		if info, err := os.Stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+			in = nil // run by hand in a terminal: no input to wait for
+		}
+		showStatusLine(in, os.Getenv("ANTHROPIC_BASE_URL"), os.Stdout)
 	case "remove":
 		err = removeAccount(a, args, os.Stdin, os.Stdout)
 	default:
@@ -229,11 +241,14 @@ func activeFromStatus(raw []byte) string {
 	if json.Unmarshal(raw, &rows) != nil {
 		return ""
 	}
+	return activeFor(rows, sharedClient)
+}
+
+// activeFor is the account the proxy has chosen for client; empty before the client's first request.
+func activeFor(rows []accountStatus, client string) string {
 	for _, r := range rows {
-		for _, c := range r.ActiveFor {
-			if c == sharedClient {
-				return r.ID
-			}
+		if slices.Contains(r.ActiveFor, client) {
+			return r.ID
 		}
 	}
 	return ""

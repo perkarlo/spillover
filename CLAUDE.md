@@ -15,7 +15,7 @@ serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT); named limitbreak un
 .
 ├── main.go          # proxy: routing, account discovery, tokens, switching, /_status and /_use
 ├── cli.go           # commands add, list, use, remove and the usage text
-├── usage.go         # `spillover usage`: each account's windows from /api/oauth/usage
+├── usage.go         # `spillover usage` (each account's windows) and `spillover statusline`
 ├── *_test.go        # tests against stand-in upstreams in temp home dirs
 ├── install.sh       # builds or installs the binary, writes the launchd / systemd user service
 ├── shell.sh         # the `claude` function: through the proxy when it runs, plain when not
@@ -39,7 +39,7 @@ Deliberate decisions. Before changing one, read why it is here.
 | # | Rule | Why |
 | --- | --- | --- |
 | 1 | A token never reaches output, a log line, an error message or `/_status` | Tokens are read in place from Claude Code's own store; whoever sees one holds the account. `account.Dir` and `Path` are `json:"-"`, `readUsage` masks a token the server echoes |
-| 2 | Only `/v1/messages*` and the `/usage` read (`GET /api/oauth/usage`, any query) go on an account's token; every other path passes through with Claude Code's own credentials | Connectors, MCP, artifacts and the profile belong to the login Claude Code holds; moving them breaks them or mixes two accounts in one session. The usage read follows the account that is spending (DEV-922) |
+| 2 | Only `/v1/messages*` goes on an account's token; every other path passes through with Claude Code's own credentials | Connectors, MCP, artifacts and the profile belong to the login Claude Code holds; moving them breaks them or mixes two accounts in one session. Claude Code's `/usage` read never reaches the proxy: it goes to `https://api.anthropic.com` directly (DEV-922) |
 | 3 | `CLAUDE_CODE_OAUTH_TOKEN` is never set for Claude Code | With it Claude Code drops its claude.ai connectors and local MCP servers |
 | 4 | Only Claude Code refreshes a login: one `claude -p` under that config dir. spillover never writes a credential | Refresh tokens rotate; a second refresher logs Claude Code out |
 | 5 | Never worse than no proxy: when no account can take a request, it goes on as Claude Code made it | The proxy sits in front of every session; its failure must cost nothing. `shell.sh` runs plain `claude` when the proxy is down |
@@ -58,7 +58,6 @@ Deliberate decisions. Before changing one, read why it is here.
 | Token | Every source is read (Keychain items, `.credentials.json`); the unexpired token that lasts longest wins. None: one refresh, then read again |
 | Spent | Marked until `anthropic-ratelimit-unified-reset`, an hour when unsaid. A login that gives no token is skipped for 5 minutes |
 | Replay | The buffered body goes to the next usable account, each account at most once per request; then pass-through (invariant 5) |
-| Usage read | On the active account's live token, no refresh, never counted as served. No token, or a 401 or 403: sent again as Claude Code made it |
 
 ## Conventions
 
@@ -84,8 +83,6 @@ The long reason behind short lines in the code. Read before simplifying one away
 | `ServeHTTP` | the body is read whole before the first try | The same bytes are sent again on the next account |
 | `ServeHTTP` | `for range len(...) + 1` | Each account is tried once per request, so a run of spent replies ends in pass-through |
 | `ServeHTTP` | no token: `spend(..., unavailableBackoff)` | A refresh can take up to 45 s; without the backoff every request would wait on it again |
-| `usageRead` | `readToken`, not `token` | Claude Code gives the read 5 s; a refresh can take 45 s |
-| `usageRead` | a 401 or 403 is sent again with Claude Code's own credentials | Claude Code sends the read with `refreshOAuth`: a 401 would make it refresh its own login, which did nothing wrong |
 | `newProxy` | `CheckRedirect` returns `ErrUseLastResponse` | A redirect goes back to Claude Code as it is; the proxy does not follow it with an account's token |
 | `relay` | flush after every read | A stream of events is not held back |
 | `accounts.list` | cached for `discoveryInterval` | Each login costs `security` calls; a new login still shows up within 30 s |
@@ -97,6 +94,8 @@ The long reason behind short lines in the code. Read before simplifying one away
 | `removeAccount` | `default` refused | It is Claude Code's own login; `claude auth logout` signs it out |
 | `newWindow` | reset rounded to the minute | The endpoint stamps a reset up to a second off (05:59:59.967 or 06:00:00.513 for 06:00) |
 | `usagePath` | `/api/oauth/usage` | The endpoint Claude Code's `/usage` reads; not a documented API, it may change |
+| `statusText` | the windows come from Claude Code's `rate_limits`, not from the usage endpoint | Claude Code sends its `/usage` read to its OAuth `BASE_API_URL` (`https://api.anthropic.com`), which `ANTHROPIC_BASE_URL` does not move (measured on 2.1.310 to 2.1.316); `rate_limits` comes from the reply headers the proxy relays, so it is the answering account's |
+| `showStatusLine` | `spillover: not running` only on a refused connection | A slow `/_status` (Keychain reads on discovery) is not a stopped proxy |
 | `install.sh` | old labels and units booted out and removed | Earlier builds ran as `com.hicomputers.claude-account-proxy`, `dev.claude-account-proxy` and `dev.limitbreak`; two services would fight for the port |
 | `install.sh` | `sleep 1` after `launchctl bootout` | Bootstrapping while the old job is still going away fails |
 | `install.sh` | old binaries removed; `claude-account-proxy-shell.sh` and `limitbreak-shell.sh` become one-line shims | A profile line from an earlier build keeps working |

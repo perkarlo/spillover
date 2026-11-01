@@ -86,7 +86,7 @@ func TestRemoveDeletesTheLoginAfterConfirmationAndNeverTheDefault(t *testing.T) 
 }
 
 func TestListMarksTheActiveAccountFromStatus(t *testing.T) {
-	raw := []byte(`[{"id":"default","spentUntil":null,"activeFor":[]},{"id":"work","spentUntil":null,"activeFor":["shared"]}]`)
+	raw := []byte(`[{"id":"default","spentUntil":null,"activeFor":["agent_a"]},{"id":"work","spentUntil":null,"activeFor":["shared"]}]`)
 	if activeFromStatus(raw) != "work" {
 		t.Fatal("active not read")
 	}

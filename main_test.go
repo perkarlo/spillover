@@ -42,14 +42,12 @@ func writeJSON(t *testing.T, path string, v any) {
 	}
 }
 
-// upstream stands in for Anthropic: it records the tokens it was asked with, rejects those in spent
-// and answers 401 to refused.
+// upstream stands in for Anthropic: it records the tokens it was asked with and rejects those in spent.
 type upstream struct {
 	*httptest.Server
-	mu      sync.Mutex
-	seen    []string
-	paths   []string
-	refused string
+	mu    sync.Mutex
+	seen  []string
+	paths []string
 }
 
 func newUpstream(t *testing.T, spent ...string) *upstream {
@@ -60,12 +58,7 @@ func newUpstream(t *testing.T, spent ...string) *upstream {
 		u.mu.Lock()
 		u.seen = append(u.seen, token)
 		u.paths = append(u.paths, r.URL.RequestURI())
-		refused := u.refused
 		u.mu.Unlock()
-		if refused != "" && token == "Bearer "+refused {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
 		for _, s := range spent {
 			if token == "Bearer "+s {
 				w.Header().Set("anthropic-ratelimit-unified-status", "rejected")
@@ -251,61 +244,14 @@ func TestStatusListsAccountsWithoutTokens(t *testing.T) {
 	}
 }
 
-func TestOnlyMessagesAndTheUsageReadAreSentOnAnAccount(t *testing.T) {
+func TestOnlyMessagesAreSentOnAnAccountEverythingElseKeepsClaudesOwnLogin(t *testing.T) {
 	up := newUpstream(t)
 	server, _ := start(t, makeHome(t, map[string]string{"default": "t-default"}), up)
 	post(t, server.URL, "/api/oauth/profile")
 	post(t, server.URL, "/v1/messages?beta=true")
-	get(t, server.URL, "/api/oauth/usage")
-	post(t, server.URL, "/api/oauth/usage")
-	get(t, server.URL, "/api/oauth/usage_history")
-	want := "Bearer claude-own-login,Bearer t-default,Bearer t-default,Bearer claude-own-login,Bearer claude-own-login"
-	if strings.Join(up.seen, ",") != want {
+	get(t, server.URL, "/api/oauth/usage?at_wall=1&skip_spend=1")
+	if strings.Join(up.seen, ",") != "Bearer claude-own-login,Bearer t-default,Bearer claude-own-login" {
 		t.Fatal(up.seen)
-	}
-}
-
-func TestTheUsageReadFollowsTheActiveAccountWithItsQuery(t *testing.T) {
-	up := newUpstream(t, "t-default")
-	server, acc := start(t, makeHome(t, map[string]string{"default": "t-default", "work": "t-work"}), up)
-	post(t, server.URL, "/v1/messages")
-	read := "/api/oauth/usage?at_wall=1&starry_waterfall=cli_menu&skip_spend=1"
-	if status, _ := get(t, server.URL, read); status != 200 {
-		t.Fatal(status)
-	}
-	if up.seen[len(up.seen)-1] != "Bearer t-work" || up.paths[len(up.paths)-1] != read {
-		t.Fatal(up.seen, up.paths)
-	}
-	if acc.served["work"] != 1 {
-		t.Fatal("a usage read was counted as served", acc.served)
-	}
-}
-
-func TestTheUsageReadGoesOnWithClaudesOwnLoginWhenTheAccountCannotAnswer(t *testing.T) {
-	up := newUpstream(t)
-	up.refused = "t-default"
-	server, _ := start(t, makeHome(t, map[string]string{"default": "t-default"}), up)
-	if status, _ := get(t, server.URL, "/api/oauth/usage"); status != 200 {
-		t.Fatal("a refused account token reached Claude Code", status)
-	}
-	if strings.Join(up.seen, ",") != "Bearer t-default,Bearer claude-own-login" {
-		t.Fatal(up.seen)
-	}
-
-	home := makeHome(t, map[string]string{"default": "t-default"})
-	writeJSON(t, filepath.Join(home, ".claude", ".credentials.json"), map[string]any{"claudeAiOauth": map[string]any{"accessToken": "old", "expiresAt": 1000}})
-	expired := newUpstream(t)
-	server, _ = start(t, home, expired)
-	get(t, server.URL, "/api/oauth/usage")
-	if strings.Join(expired.seen, ",") != "Bearer claude-own-login" {
-		t.Fatal(expired.seen)
-	}
-
-	none := newUpstream(t)
-	server, _ = start(t, t.TempDir(), none)
-	get(t, server.URL, "/api/oauth/usage")
-	if strings.Join(none.seen, ",") != "Bearer claude-own-login" {
-		t.Fatal(none.seen)
 	}
 }
 

@@ -181,6 +181,53 @@ func TestUsageNeverShowsATokenEvenWhenTheServerEchoesIt(t *testing.T) {
 	}
 }
 
+// statusLine is what `spillover statusline` prints for a session with this base URL and input.
+func statusLine(base, input string) string {
+	var out bytes.Buffer
+	showStatusLine(strings.NewReader(input), base, &out)
+	return out.String()
+}
+
+func TestStatusLineNamesTheSessionsAccountAndTheWindowsOfItsLastReply(t *testing.T) {
+	up := newUpstream(t, "t-default")
+	server, acc := start(t, makeHome(t, map[string]string{"default": "t-default", "work": "t-work"}), up)
+	reply := `{"model": {"id": "claude-opus-5-5"}, "rate_limits": {"five_hour": {"used_percentage": 76, "resets_at": 1793511600},
+		"seven_day": {"used_percentage": 23.4, "resets_at": 1793786400}}}`
+	if got := statusLine(server.URL, reply); got != "default 5h 76% · wk 23.4%\n" {
+		t.Fatal("before the first request", got)
+	}
+	post(t, server.URL, "/v1/messages")
+	acc.use("agent_a", "default")
+	cases := []struct{ base, input, want string }{
+		{server.URL, reply, "work 5h 76% · wk 23.4%\n"},
+		{server.URL + "/", `{"rate_limits": {"seven_day": {"used_percentage": 89}}}`, "work wk 89%\n"},
+		{server.URL, `{"model": {"id": "claude-opus-5-5"}}`, "work\n"},
+		{server.URL, ``, "work\n"},
+		{server.URL + "/_c/agent_a", reply, "default 5h 76% · wk 23.4%\n"},
+		{"", reply, ""},
+		{"https://api.anthropic.com", reply, ""},
+		{"http://example.com:48617", reply, ""},
+	}
+	for _, c := range cases {
+		if got := statusLine(c.base, c.input); got != c.want {
+			t.Fatalf("%q %q: %q", c.base, c.input, got)
+		}
+	}
+}
+
+func TestStatusLineSaysWhenTheProxyIsDownAndKeepsQuietForAnotherServer(t *testing.T) {
+	stopped := httptest.NewServer(http.NotFoundHandler())
+	stopped.Close()
+	if got := statusLine(stopped.URL, "{}"); got != "spillover: not running\n" {
+		t.Fatal(got)
+	}
+	other := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(other.Close)
+	if got := statusLine(other.URL, "{}"); got != "" {
+		t.Fatal(got)
+	}
+}
+
 func TestUsageFlagsAndShortDurations(t *testing.T) {
 	if q, ok := usageFlags([]string{"--all", "--json"}); !ok || !q.all || !q.json {
 		t.Fatal(q, ok)

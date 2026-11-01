@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"text/tabwriter"
 	"time"
 )
@@ -305,6 +308,99 @@ func printUsageTable(out io.Writer, rows []accountUsage, now time.Time) {
 			percentText(r.FiveHour), resetText(r.FiveHour, now), percentText(r.Weekly), resetText(r.Weekly, now), byModel)
 	}
 	tw.Flush()
+}
+
+// statusInput is the part of Claude Code's status line input spillover reads: the windows of the
+// session's last reply, from the headers of the account that answered it.
+type statusInput struct {
+	RateLimits struct {
+		FiveHour *statusWindow `json:"five_hour"`
+		SevenDay *statusWindow `json:"seven_day"`
+	} `json:"rate_limits"`
+}
+
+type statusWindow struct {
+	UsedPercentage *float64 `json:"used_percentage"`
+}
+
+// percent is the window's fill as "76%"; empty when the input did not carry it.
+func (w *statusWindow) percent() string {
+	if w == nil || w.UsedPercentage == nil {
+		return ""
+	}
+	return percentText(&usageWindow{Percent: *w.UsedPercentage})
+}
+
+// sessionProxy is the proxy address and client of a session's ANTHROPIC_BASE_URL; ok is false when
+// the session does not send through a proxy on this machine.
+func sessionProxy(baseURL string) (base, client string, ok bool) {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme != "http" {
+		return "", "", false
+	}
+	switch u.Hostname() {
+	case "127.0.0.1", "localhost", "::1":
+	default:
+		return "", "", false
+	}
+	client = sharedClient
+	if c, _, routed := route(strings.TrimSuffix(u.Path, "/") + "/"); routed {
+		client = c
+	}
+	return u.Scheme + "://" + u.Host, client, true
+}
+
+// statusText is the status line segment "work 5h 76% · wk 23%": the client's account and the
+// windows of the session's last reply. Empty when the proxy names no account.
+func statusText(in statusInput, rows []accountStatus, client string) string {
+	label := activeFor(rows, client)
+	if label == "" && len(rows) > 0 {
+		label = rows[0].ID
+	}
+	if label == "" {
+		return ""
+	}
+	var windows []string
+	if p := in.RateLimits.FiveHour.percent(); p != "" {
+		windows = append(windows, "5h "+p)
+	}
+	if p := in.RateLimits.SevenDay.percent(); p != "" {
+		windows = append(windows, "wk "+p)
+	}
+	if len(windows) == 0 {
+		return label
+	}
+	return label + " " + strings.Join(windows, " · ")
+}
+
+// showStatusLine prints the status line segment of the session whose status line input is in and
+// whose ANTHROPIC_BASE_URL is baseURL: nothing when the session does not go through the proxy,
+// "spillover: not running" when that proxy refuses the connection.
+func showStatusLine(in io.Reader, baseURL string, out io.Writer) {
+	var input statusInput
+	if in != nil {
+		_ = json.NewDecoder(io.LimitReader(in, 1<<20)).Decode(&input)
+	}
+	base, client, ok := sessionProxy(baseURL)
+	if !ok {
+		return
+	}
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(base + "/_status")
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		fmt.Fprintln(out, "spillover: not running")
+		return
+	}
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	var rows []accountStatus
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rows) != nil {
+		return
+	}
+	if text := statusText(input, rows, client); text != "" {
+		fmt.Fprintln(out, text)
+	}
 }
 
 // percentText is a window's fill to one decimal at most ("12%", "12.5%"); "-" when the reply had no
