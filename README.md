@@ -1,4 +1,23 @@
+<div align="center">
+
+<img src="docs/spillover.gif" width="880" alt="A request from claude passes the proxy and falls into account 1, which is full and answers 429. The account spills over into account 2, which answers 200, and the reply goes back to claude.">
+
 # spillover
+
+**Several Claude accounts, one Claude Code session.**<br>
+When an account hits its usage limit, the same request moves to the next account before Claude Code sees the error.
+
+[![CI](https://github.com/perkarlo/spillover/actions/workflows/ci.yml/badge.svg)](https://github.com/perkarlo/spillover/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/perkarlo/spillover)](https://github.com/perkarlo/spillover/releases)
+[![Go](https://img.shields.io/github/go-mod/go-version/perkarlo/spillover)](go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+[Quick start](#quick-start) · [How it works](#what-it-does-and-does-not-touch) · [Logins expire](#logins-expire) · [Terms of service](#caveats-read-these) · [FAQ](#faq)
+
+</div>
+
+> [!WARNING]
+> Read [Terms of service](#caveats-read-these) before you install. Anthropic's Usage Policy, effective November 12, 2026, names services that route requests through consumer subscriptions and creating multiple accounts to circumvent product guardrails; a breach can end in suspension without notice. You are responsible for your use. Not affiliated with or endorsed by Anthropic.
 
 Use several Claude accounts from **one** Claude Code install, and switch between them automatically when an account's usage limit is hit, without restarting the session or losing its history.
 
@@ -33,7 +52,7 @@ Open a new terminal and run `claude` as usual. When one account's limit is hit, 
 
 ## Install
 
-Needs Go 1.22+ to build, macOS or Linux. Prebuilt binaries are attached to each [release](../../releases).
+Needs Go 1.22+ to build, macOS or Linux. Prebuilt binaries are attached to each [release](../../releases) with a `checksums.txt`; check the one you take with `shasum -a 256 -c checksums.txt --ignore-missing` before `./install.sh --binary <path>`.
 
 ```sh
 git clone https://github.com/perkarlo/spillover
@@ -118,6 +137,18 @@ input=$(cat)
 account=$(printf '%s' "$input" | ~/.local/bin/spillover statusline)
 ```
 
+## FAQ
+
+**Does the session keep its context when the account changes?** Yes. The switch happens inside one request: Claude Code keeps the same session, history, tools and MCP servers, and only the account that answers changes.
+
+**Does it work with the Claude desktop app?** No. It works with the `claude` CLI started from a shell that loaded `spillover-shell.sh`; the desktop app is not started from that shell, so its requests never reach the proxy.
+
+**Why does Claude Code's `/usage` still show my first account?** Claude Code sends that read to Anthropic itself, past the proxy. `spillover usage --all` shows every account; see [See how full each account is](#see-how-full-each-account-is).
+
+**Can a website or another machine use my accounts through it?** No. The proxy listens on 127.0.0.1, answers only requests addressed to the loopback that no browser sent, and never puts a token in its output, logs or `/_status`. Reports go through [SECURITY.md](SECURITY.md).
+
+**Windows?** Not supported; macOS and Linux only.
+
 ## Options
 
 `spillover serve --port 48617 --upstream https://api.anthropic.com --home ~ --credentials auto|keychain|file`
@@ -145,6 +176,10 @@ go vet ./... && test -z "$(gofmt -l .)" && go test ./... && ./.github/checks.sh
 
 The rules for changing the code, and the reasons behind them, are in [CLAUDE.md](CLAUDE.md).
 
-## License
+## Contributing
 
-MIT, see [LICENSE](LICENSE). Forked from [radu2lupu/limitbreak](https://github.com/radu2lupu/limitbreak).
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for anything security related. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Credits and license
+
+This project started as a fork of [limitbreak](https://github.com/radu2lupu/limitbreak) by Radu Lupu. MIT, see [LICENSE](LICENSE).

@@ -25,6 +25,7 @@ serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT); named limitbreak un
 ├── SECURITY.md      # private vulnerability reporting and scope
 ├── CLAUDE.md        # this file
 ├── LICENSE          # MIT, upstream copyright and ours
+├── docs/            # spillover.gif (README hero, 10 s loop) and social-preview.png (1280x640)
 └── .github/
     ├── checks.sh    # consistency checks; run it locally too
     ├── ISSUE_TEMPLATE/, PULL_REQUEST_TEMPLATE.md, dependabot.yml
