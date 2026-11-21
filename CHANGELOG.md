@@ -4,6 +4,10 @@ All notable changes to spillover. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-21
+
+First release at github.com/perkarlo/spillover.
+
 ### Added
 
 - `spillover list`, the `LOGIN` column of `spillover usage --all` and `/_status` (`loginExpiresAt`) show when each login must be signed in again. The status line adds `· login <account> 2d3h` in the last three days.
@@ -39,6 +43,7 @@ All notable changes to spillover. The format follows [Keep a Changelog](https://
 
 First release as limitbreak by Radu Lupu: the account-switching proxy, `add`, `list` and `remove`, prebuilt binaries.
 
-[Unreleased]: https://github.com/perkarlo/spillover/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/perkarlo/spillover/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/perkarlo/spillover/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/perkarlo/spillover/compare/v0.1.0...v0.8.0
 [0.1.0]: https://github.com/perkarlo/spillover/releases/tag/v0.1.0
