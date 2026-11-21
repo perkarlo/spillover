@@ -37,7 +37,9 @@ type accountUsage struct {
 	FiveHour *usageWindow  `json:"fiveHour"`
 	Weekly   *usageWindow  `json:"weekly"`
 	Models   []usageWindow `json:"models"`
-	Error    string        `json:"error,omitempty"`
+	// LoginExpiresAt is when the login must be signed in again; null when its credential does not say.
+	LoginExpiresAt *time.Time `json:"loginExpiresAt"`
+	Error          string     `json:"error,omitempty"`
 }
 
 // usageReply is the part of the usage endpoint's answer spillover reads.
@@ -153,7 +155,9 @@ func usageOf(a *accounts, list []account, base, active string) []accountUsage {
 		go func(i int, acc account) {
 			defer wg.Done()
 			row := accountUsage{Models: []usageWindow{}}
-			if token := a.token(acc); token == "" {
+			if token := a.token(acc); token == "" && loginExpired(acc, a.now()) {
+				row.Error = "login expired; sign in again with `" + renewCommand(acc) + "`"
+			} else if token == "" {
 				row.Error = "no live login; run `claude` once under this account"
 			} else if got, err := readUsage(client, base, token); err != nil {
 				row.Error = err.Error()
@@ -161,6 +165,10 @@ func usageOf(a *accounts, list []account, base, active string) []accountUsage {
 				row = got
 			}
 			row.ID, row.Email, row.Active = acc.ID, acc.Email, acc.ID == active
+			if !acc.LoginExpires.IsZero() {
+				expires := acc.LoginExpires
+				row.LoginExpiresAt = &expires
+			}
 			rows[i] = row
 		}(i, acc)
 	}
@@ -273,6 +281,9 @@ func printUsageOne(out io.Writer, r accountUsage, now time.Time) {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "  5-hour\t%s\t%s\n", percentText(r.FiveHour), resetText(r.FiveHour, now))
 	fmt.Fprintf(tw, "  weekly\t%s\t%s\n", percentText(r.Weekly), resetText(r.Weekly, now))
+	if r.LoginExpiresAt != nil {
+		fmt.Fprintf(tw, "  login\t%s\t%s\n", loginText(r.LoginExpiresAt, now), dateText(r.LoginExpiresAt, now))
+	}
 	for i := range r.Models {
 		m := &r.Models[i]
 		fmt.Fprintf(tw, "  weekly %s\t%s\t%s\n", m.Model, percentText(m), resetText(m, now))
@@ -282,7 +293,7 @@ func printUsageOne(out io.Writer, r accountUsage, now time.Time) {
 
 func printUsageTable(out io.Writer, rows []accountUsage, now time.Time) {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "  ACCOUNT\tEMAIL\t5-HOUR\tRESETS\tWEEKLY\tRESETS\tWEEKLY BY MODEL")
+	fmt.Fprintln(tw, "  ACCOUNT\tEMAIL\tLOGIN\t5-HOUR\tRESETS\tWEEKLY\tRESETS\tWEEKLY BY MODEL")
 	for _, r := range rows {
 		mark := " "
 		if r.Active {
@@ -293,7 +304,7 @@ func printUsageTable(out io.Writer, rows []accountUsage, now time.Time) {
 			email = "(email unknown)"
 		}
 		if r.Error != "" {
-			fmt.Fprintf(tw, "%s %s\t%s\t?\t\t?\t\t\n", mark, r.ID, email)
+			fmt.Fprintf(tw, "%s %s\t%s\t%s\t?\t\t?\t\t\n", mark, r.ID, email, loginText(r.LoginExpiresAt, now))
 			continue
 		}
 		models := make([]string, 0, len(r.Models))
@@ -304,7 +315,7 @@ func printUsageTable(out io.Writer, rows []accountUsage, now time.Time) {
 		if byModel == "" {
 			byModel = "-"
 		}
-		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%s\t%s\t%s\t%s\n", mark, r.ID, email,
+		fmt.Fprintf(tw, "%s %s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", mark, r.ID, email, loginText(r.LoginExpiresAt, now),
 			percentText(r.FiveHour), resetText(r.FiveHour, now), percentText(r.Weekly), resetText(r.Weekly, now), byModel)
 	}
 	tw.Flush()
@@ -351,8 +362,9 @@ func sessionProxy(baseURL string) (base, client string, ok bool) {
 }
 
 // statusText is the status line segment "work 5h 76% · wk 23%": the client's account and the
-// windows of the session's last reply. Empty when the proxy names no account.
-func statusText(in statusInput, rows []accountStatus, client string) string {
+// windows of the session's last reply, then any login due for a new sign-in ("· login claude 2d3h").
+// Empty when the proxy names no account.
+func statusText(in statusInput, rows []accountStatus, client string, now time.Time) string {
 	label := activeFor(rows, client)
 	if label == "" && len(rows) > 0 {
 		label = rows[0].ID
@@ -367,10 +379,19 @@ func statusText(in statusInput, rows []accountStatus, client string) string {
 	if p := in.RateLimits.SevenDay.percent(); p != "" {
 		windows = append(windows, "wk "+p)
 	}
-	if len(windows) == 0 {
-		return label
+	text := label
+	if len(windows) > 0 {
+		text += " " + strings.Join(windows, " · ")
 	}
-	return label + " " + strings.Join(windows, " · ")
+	for _, r := range rows {
+		if r.LoginExpiresAt == nil {
+			continue
+		}
+		if left := time.Unix(*r.LoginExpiresAt, 0).Sub(now); left <= loginWarning {
+			text += " · login " + r.ID + " " + loginLeft(left)
+		}
+	}
+	return text
 }
 
 // showStatusLine prints the status line segment of the session whose status line input is in and
@@ -398,7 +419,7 @@ func showStatusLine(in io.Reader, baseURL string, out io.Writer) {
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rows) != nil {
 		return
 	}
-	if text := statusText(input, rows, client); text != "" {
+	if text := statusText(input, rows, client, time.Now()); text != "" {
 		fmt.Fprintln(out, text)
 	}
 }
@@ -418,6 +439,38 @@ func resetText(w *usageWindow, now time.Time) string {
 		return "-"
 	}
 	return w.ResetsAt.In(now.Location()).Format("Mon 15:04") + " (" + shortDuration(w.ResetsAt.Sub(now)) + ")"
+}
+
+// loginText is how long a login has until it must be signed in again: "29d", "2d3h renew",
+// "expired"; "-" when its credential does not say.
+func loginText(t *time.Time, now time.Time) string {
+	if t == nil {
+		return "-"
+	}
+	left := t.Sub(now)
+	switch {
+	case left <= 0:
+		return "expired"
+	case left <= loginWarning:
+		return shortDuration(left) + " renew"
+	default:
+		return strconv.Itoa(int(left/(24*time.Hour))) + "d"
+	}
+}
+
+func loginLeft(left time.Duration) string {
+	if left <= 0 {
+		return "expired"
+	}
+	return shortDuration(left)
+}
+
+// dateText is t on the clock of now's zone ("2026-12-21 13:34"); "-" when unknown.
+func dateText(t *time.Time, now time.Time) string {
+	if t == nil {
+		return "-"
+	}
+	return t.In(now.Location()).Format("2006-01-02 15:04")
 }
 
 // shortDuration is d as "3d4h", "2h47m" or "12m"; "now" when it is not ahead.

@@ -119,10 +119,10 @@ func TestUsageTableShowsEveryAccountAndMarksTheActiveOne(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatal(out.String())
 	}
-	if f := strings.Fields(lines[1]); strings.Join(f, " ") != "default default@example.com - - 89% Tue 06:00 (2d8h) Fable 0%" {
+	if f := strings.Fields(lines[1]); strings.Join(f, " ") != "default default@example.com - - - 89% Tue 06:00 (2d8h) Fable 0%" {
 		t.Fatal(lines[1])
 	}
-	if f := strings.Fields(lines[2]); strings.Join(f, " ") != "* work work@example.com 12% Sun 00:20 (2h47m) 2% Wed 10:00 (3d12h) -" {
+	if f := strings.Fields(lines[2]); strings.Join(f, " ") != "* work work@example.com - 12% Sun 00:20 (2h47m) 2% Wed 10:00 (3d12h) -" {
 		t.Fatal(lines[2])
 	}
 }
@@ -247,6 +247,37 @@ func TestUsageFlagsAndShortDurations(t *testing.T) {
 		}
 	}
 	if got := percentText(&usageWindow{Percent: 12.34}); got != "12.3%" {
+		t.Fatal(got)
+	}
+}
+
+func TestLoginExpiryReadsAsDaysARenewalOrExpiredAndTheStatusLineWarnsInTheLastThreeDays(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) *time.Time { t := now.Add(d); return &t }
+	cases := []struct {
+		at   *time.Time
+		want string
+	}{
+		{nil, "-"},
+		{at(29*24*time.Hour + time.Hour), "29d"},
+		{at(2*24*time.Hour + 3*time.Hour), "2d3h renew"},
+		{at(-time.Minute), "expired"},
+	}
+	for _, c := range cases {
+		if got := loginText(c.at, now); got != c.want {
+			t.Fatal(c.want, got)
+		}
+	}
+	unix := func(d time.Duration) *int64 { u := now.Add(d).Unix(); return &u }
+	rows := []accountStatus{
+		{ID: "default", ActiveFor: []string{"shared"}, LoginExpiresAt: unix(20 * 24 * time.Hour)},
+		{ID: "claude", ActiveFor: []string{}, LoginExpiresAt: unix(2*24*time.Hour + 3*time.Hour)},
+		{ID: "old", ActiveFor: []string{}, LoginExpiresAt: unix(-time.Hour)},
+		{ID: "unknown", ActiveFor: []string{}},
+	}
+	in := statusInput{}
+	in.RateLimits.FiveHour = &statusWindow{UsedPercentage: func() *float64 { f := 76.0; return &f }()}
+	if got := statusText(in, rows, sharedClient, now); got != "default 5h 76% · login claude 2d3h · login old expired" {
 		t.Fatal(got)
 	}
 }

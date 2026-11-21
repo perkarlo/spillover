@@ -55,7 +55,7 @@ Deliberate decisions. Before changing one, read why it is here.
 | --- | --- |
 | Accounts | The default login (`~/.claude`) and every `~/.claude-<name>` dir with a credential, in name order; cached 30 s |
 | Client | `/_c/<client>/...` names a client with its own active account (the prefix is stripped); any other path is `shared` |
-| Token | Every source is read (Keychain items, `.credentials.json`); the unexpired token that lasts longest wins. None: one refresh, then read again |
+| Token | Every source is read (Keychain items, `.credentials.json`); the unexpired token that lasts longest wins. None: one refresh, then read again; a login past its `refreshTokenExpiresAt` gets no refresh |
 | Spent | Marked until `anthropic-ratelimit-unified-reset`, an hour when unsaid. A login that gives no token is skipped for 5 minutes |
 | Replay | The buffered body goes to the next usable account, each account at most once per request; then pass-through (invariant 5) |
 
@@ -89,6 +89,8 @@ The long reason behind short lines in the code. Read before simplifying one away
 | `credentialSources` | the user's Keychain item first, every other source kept | An older sign-in can leave a stale item or file under the same name; `readToken` keeps the token that lasts longest |
 | `claudeEnv` | `ANTHROPIC_BASE_URL` and `CLAUDE_CODE_OAUTH_TOKEN` removed | The refresh must reach Anthropic as that login: through the proxy it would loop, with an injected token it would refresh nothing |
 | `claudeEnv` | `CLAUDE_SECURESTORAGE_CONFIG_DIR` set next to `CLAUDE_CONFIG_DIR` | The refreshed login must land in the Keychain item `keychainService(dir)` names |
+| `loginExpiry` | the latest `refreshTokenExpiresAt` across sources | Claude Code keeps a login's end date there (2.1.330: 30 days from sign-in; a refresh keeps the earlier date). A stale item from an older sign-in must not hide the new date |
+| `token` | no refresh once the login is past its expiry | Only a new sign-in brings it back; the refresh would cost up to 45 s per try for nothing |
 | `accounts.use` | the chosen account loses its spent mark | A choice is honoured; if the window is still spent, the next reply marks it again |
 | `addAccount` | the dir is removed only when this call created it | A failed sign-in never deletes an existing login |
 | `removeAccount` | `default` refused | It is Claude Code's own login; `claude auth logout` signs it out |
@@ -110,7 +112,7 @@ The long reason behind short lines in the code. Read before simplifying one away
 | Port | `defaultPort`, `shell.sh`, README, this file | yes, checks.sh |
 | Service label | `install.sh`, README Uninstall, this file | yes, checks.sh |
 | What goes on an account's token | invariants 2 and 6, README "What it does and does not touch" | no |
-| `/_status` or `/_use` shape | README | no |
+| `/_status` or `/_use` shape (incl. `loginExpiresAt`) | README | no |
 | New reason behind a code line | one-line comment and a Defense lines row | yes, 4+ comment lines rejected |
 | File added or removed | the tree at the top | no |
 | Run line | the "After every change" line and `ci.yml`, same commands | yes, checks.sh |

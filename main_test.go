@@ -300,3 +300,36 @@ func TestUseSwitchesTheSharedClientAndOnlyTakesJSON(t *testing.T) {
 		t.Fatal(acc.served)
 	}
 }
+
+func TestAnExpiredLoginIsSkippedWithoutARefreshAndEveryExpiryIsInStatus(t *testing.T) {
+	home := makeHome(t, map[string]string{"default": "t-default", "work": "t-work"})
+	writeJSON(t, filepath.Join(home, ".claude", ".credentials.json"), map[string]any{"claudeAiOauth": map[string]any{
+		"accessToken": "old", "expiresAt": 1000, "refreshTokenExpiresAt": 2000}})
+	writeJSON(t, filepath.Join(home, ".claude-work", ".credentials.json"), map[string]any{"claudeAiOauth": map[string]any{
+		"accessToken": "t-work", "expiresAt": float64(far) * 1000, "refreshTokenExpiresAt": float64(far) * 1000}})
+	marker := filepath.Join(t.TempDir(), "refreshed")
+	fake := filepath.Join(t.TempDir(), "claude")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	up := newUpstream(t)
+	server, acc := start(t, home, up)
+	acc.claude = fake
+	if status, _ := post(t, server.URL, "/v1/messages"); status != 200 {
+		t.Fatal(status)
+	}
+	if strings.Join(up.seen, ",") != "Bearer t-work" {
+		t.Fatal(up.seen)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("an expired login was refreshed")
+	}
+	resp, err := http.Get(server.URL + "/_status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(raw), `"loginExpiresAt":2,`) || !strings.Contains(string(raw), `"loginExpiresAt":4000000000,`) {
+		t.Fatal(string(raw))
+	}
+}

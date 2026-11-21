@@ -34,6 +34,7 @@ const (
 	fallbackExhaustion  = time.Hour
 	unavailableBackoff  = 5 * time.Minute
 	discoveryInterval   = 30 * time.Second
+	loginWarning        = 3 * 24 * time.Hour
 	defaultID           = "default"
 	spentHeader         = "Anthropic-Ratelimit-Unified-Status"
 	resetHeader         = "Anthropic-Ratelimit-Unified-Reset"
@@ -111,6 +112,8 @@ type account struct {
 	// Dir is the config dir of a non-default login; empty for the default one.
 	Dir  string `json:"-"`
 	Path string `json:"-"`
+	// LoginExpires is when the login must be signed in again; zero when its credential does not say.
+	LoginExpires time.Time `json:"-"`
 }
 
 type accounts struct {
@@ -175,6 +178,7 @@ func (a *accounts) list() []account {
 	}
 	for i := range found {
 		found[i].Email = a.email(found[i])
+		found[i].LoginExpires = a.loginExpiry(found[i])
 	}
 	a.mu.Lock()
 	a.discovered, a.discoveredAt = found, a.now()
@@ -228,13 +232,53 @@ func (a *accounts) credentialSources(configDir, path string) [][]byte {
 	return sources
 }
 
-// token is a live access token, refreshed through Claude Code when every one has expired.
+// token is a live access token, refreshed through Claude Code when every one has expired. A login
+// past its expiry gives none: no refresh can bring it back, only a new sign-in.
 func (a *accounts) token(acc account) string {
 	if live := a.readToken(acc); live != "" {
 		return live
 	}
+	if loginExpired(acc, a.now()) {
+		return ""
+	}
 	a.refresh(acc)
 	return a.readToken(acc)
+}
+
+// loginExpiry is the latest login expiry across the login's credential sources; zero when none states one.
+func (a *accounts) loginExpiry(acc account) time.Time {
+	var latest time.Time
+	for _, raw := range a.credentialSources(acc.Dir, acc.Path) {
+		var doc struct {
+			ClaudeAiOauth *login `json:"claudeAiOauth"`
+			login
+		}
+		if json.Unmarshal(raw, &doc) != nil {
+			continue
+		}
+		l := doc.login
+		if doc.ClaudeAiOauth != nil {
+			l = *doc.ClaudeAiOauth
+		}
+		if l.RefreshTokenExpiresAt != nil {
+			if t := time.UnixMilli(int64(*l.RefreshTokenExpiresAt)); t.After(latest) {
+				latest = t
+			}
+		}
+	}
+	return latest
+}
+
+func loginExpired(acc account, now time.Time) bool {
+	return !acc.LoginExpires.IsZero() && !acc.LoginExpires.After(now)
+}
+
+// renewCommand signs the login in again: Claude Code's own sign-in for the default, `add` for the rest.
+func renewCommand(acc account) string {
+	if acc.ID == defaultID {
+		return "claude auth login"
+	}
+	return "spillover add " + acc.ID
 }
 
 // readToken is the access token that has not expired and lasts longest, across the login's sources.
@@ -268,8 +312,9 @@ func (a *accounts) readToken(acc account) string {
 }
 
 type login struct {
-	AccessToken string   `json:"accessToken"`
-	ExpiresAt   *float64 `json:"expiresAt"`
+	AccessToken           string   `json:"accessToken"`
+	ExpiresAt             *float64 `json:"expiresAt"`
+	RefreshTokenExpiresAt *float64 `json:"refreshTokenExpiresAt"`
 }
 
 // claudeEnv is the environment for running `claude` as the login in configDir (empty: the default
@@ -365,6 +410,8 @@ type accountStatus struct {
 	Email      string   `json:"email,omitempty"`
 	SpentUntil *int64   `json:"spentUntil"`
 	ActiveFor  []string `json:"activeFor"`
+	// LoginExpiresAt is when the login must be signed in again (Unix seconds); null when unknown.
+	LoginExpiresAt *int64 `json:"loginExpiresAt"`
 	// Served counts the messages replies this account gave since the proxy started.
 	Served int `json:"served"`
 }
@@ -386,6 +433,10 @@ func (a *accounts) status() []accountStatus {
 		if until := a.spentUntil[acc.ID]; until.After(now) {
 			unix := until.Unix()
 			s.SpentUntil = &unix
+		}
+		if !acc.LoginExpires.IsZero() {
+			unix := acc.LoginExpires.Unix()
+			s.LoginExpiresAt = &unix
 		}
 		for client, id := range a.active {
 			if id == acc.ID {
@@ -451,6 +502,9 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		token := p.accounts.token(*acc)
 		if token == "" {
+			if loginExpired(*acc, p.accounts.now()) {
+				log.Printf("account %s: login expired %s; sign in again with `%s`", acc.ID, acc.LoginExpires.Format(time.RFC3339), renewCommand(*acc))
+			}
 			// A login that cannot give a token is skipped for a while, like a spent one.
 			if p.accounts.spend(clientName, acc.ID, p.accounts.now().Add(unavailableBackoff)) != nil {
 				continue

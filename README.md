@@ -55,12 +55,21 @@ On a host without Go, build elsewhere (`GOOS=linux GOARCH=amd64 go build -o spil
 ```sh
 spillover add            # signs in a new account in your browser, names it account-N
 spillover add work       # or pick the name
-spillover list           # accounts, who they are, which one is active (*)
+spillover list           # accounts, who they are, which one is active (*), days until each login expires
 spillover use work       # send requests on this account from now on, until it is spent
 spillover remove work    # sign it out and delete its login from this machine
 ```
 
-`add` runs Claude Code's own browser sign-in into its own config directory (`~/.claude-<name>`), checks the login landed, tells you which email it is, and warns if you added the same account twice. The running proxy picks it up within 30 seconds; no restart. The default account is whatever plain `claude auth login` signs in. Raw status for scripts: `curl -s http://127.0.0.1:48617/_status`; its `served` field counts the messages replies each account gave since the proxy started.
+`add` runs Claude Code's own browser sign-in into its own config directory (`~/.claude-<name>`), checks the login landed, tells you which email it is, and warns if you added the same account twice. The running proxy picks it up within 30 seconds; no restart. The default account is whatever plain `claude auth login` signs in. Raw status for scripts: `curl -s http://127.0.0.1:48617/_status`; its `served` field counts the messages replies each account gave since the proxy started, and `loginExpiresAt` (Unix seconds, `null` when unknown) says when a login must be signed in again.
+
+### Logins expire
+
+Claude Code ends a login 30 days after its sign-in, and refreshing the token does not move that date; Claude Code itself warns three days before (`Your login expires in 1 day`). The proxy reads the same date from each login's credential, shows it in `spillover list` and the `LOGIN` column of `spillover usage --all`, and adds `· login <account> 2d3h` to the status line in the last three days. A login past its date is skipped without trying a refresh, and the log says how to sign it in again:
+
+```sh
+claude auth login        # the default account (or /login inside Claude Code)
+spillover add work       # any other account: signs the same name in again, nothing else changes
+```
 
 `use` switches running sessions on their next request, no restart. The choice lives in the proxy's memory: a restart goes back to the default account. Scripts can send `POST /_use` with `{"id": "work"}` (and `"client"` for a `/_c/<client>/` prefix); the endpoint takes JSON only, so a web page cannot switch accounts.
 
@@ -75,9 +84,9 @@ spillover usage --json     # the same for scripts (with --all, an array)
 ```
 
 ```
-  ACCOUNT  EMAIL             5-HOUR  RESETS             WEEKLY  RESETS             WEEKLY BY MODEL
-  default  me@example.com    -       -                  89%     Tue 07:00 (2d8h)   Fable 0%
-* work     work@example.com  17%     Sun 01:20 (2h39m)  3%      Wed 11:00 (3d12h)  -
+  ACCOUNT  EMAIL             LOGIN       5-HOUR  RESETS             WEEKLY  RESETS             WEEKLY BY MODEL
+  default  me@example.com    2d3h renew  -       -                  89%     Tue 07:00 (2d8h)   Fable 0%
+* work     work@example.com  29d         17%     Sun 01:20 (2h39m)  3%      Wed 11:00 (3d12h)  -
 ```
 
 `spillover usage` asks Anthropic's usage endpoint (`GET /api/oauth/usage`) once per account with that account's own token, so each account answers for itself. It does not need the proxy; with the proxy stopped, the active account is the default one. `WEEKLY BY MODEL` lists a model's own weekly limit when the plan has one, and `-` means the reply carried no such window. An expired login is refreshed the way the proxy refreshes one, with one tiny `claude -p` on that account. The endpoint is not a documented API and may change.
@@ -90,6 +99,7 @@ Claude Code's own `/usage`, `/status` and the plan in the session header always 
 
 ```
 work 5h 17% · wk 3%
+work 5h 17% · wk 3% · login default 2d3h
 ```
 
 The numbers are the `rate_limits` Claude Code hands its status line, read from the headers of the session's last reply. The proxy relayed that reply from the account that answered it, so they are that account's, and no extra request is made. The name is the account the proxy has chosen for the session (with a `/_c/<client>/` base URL, that client's). It prints nothing when the session does not go through the proxy, and `spillover: not running` when the proxy it points at is stopped. After `spillover use`, the numbers follow on the session's next reply.

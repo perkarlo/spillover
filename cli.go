@@ -191,7 +191,11 @@ func listAccounts(a *accounts, out io.Writer) {
 		if email == "" {
 			email = "(email unknown)"
 		}
-		fmt.Fprintf(out, "%s %-16s %s\n", mark, acc.ID, email)
+		var expires *time.Time
+		if !acc.LoginExpires.IsZero() {
+			expires = &acc.LoginExpires
+		}
+		fmt.Fprintf(out, "%s %-16s %-32s login %s\n", mark, acc.ID, email, loginText(expires, time.Now()))
 	}
 	if !up {
 		fmt.Fprintln(out, "(proxy not running: start it with the installed service, or `spillover`)")
