@@ -13,6 +13,11 @@ All notable changes to spillover. The format follows [Keep a Changelog](https://
 - A login past its expiry is skipped without a refresh attempt, and the log names the command that signs it in again.
 - The project lives at github.com/perkarlo/spillover. The service label is `io.github.perkarlo.spillover`; `./install.sh` moves an existing `co.birtik.spillover` service over.
 
+### Security
+
+- The proxy answers only requests addressed to the loopback (`Host` 127.0.0.1, localhost or [::1]) and refuses any request a browser sent (`Origin` or `Sec-Fetch-Site`). Before, a web page could use DNS rebinding to send messages requests on your accounts and read the replies.
+- Paths with `.` or `..` segments are refused, so a request cannot reach past `/v1/messages` with an account's token.
+
 ## [0.8.0] - 2026-11-06
 
 ### Added

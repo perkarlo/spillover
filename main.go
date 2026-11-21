@@ -469,6 +469,14 @@ func apiError(w http.ResponseWriter, status int, message string) {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !localHost(r.Host) || r.Header.Get("Origin") != "" || r.Header.Get("Sec-Fetch-Site") != "" {
+		apiError(w, http.StatusForbidden, "spillover answers local clients only, never a browser")
+		return
+	}
+	if dotSegment(r.URL.Path) {
+		apiError(w, http.StatusBadRequest, "path with . or .. segments")
+		return
+	}
 	if r.Method == http.MethodGet && r.URL.Path == "/_status" {
 		p.accounts.list()
 		w.Header().Set("Content-Type", "application/json")
@@ -564,6 +572,25 @@ func (p *proxy) use(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(p.accounts.status())
+}
+
+// localHost is a Host header naming this machine's loopback (127.0.0.1, localhost or [::1], any port).
+func localHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+// dotSegment is a path with a "." or ".." segment, which upstream could resolve past /v1/messages.
+func dotSegment(path string) bool {
+	for _, segment := range strings.Split(path, "/") {
+		if segment == "." || segment == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // isInference is a request that spends an account's usage: the messages API.

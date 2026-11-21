@@ -49,7 +49,7 @@ Deliberate decisions. Before changing one, read why it is here.
 | 5 | Never worse than no proxy: when no account can take a request, it goes on as Claude Code made it | The proxy sits in front of every session; its failure must cost nothing. `shell.sh` runs plain `claude` when the proxy is down |
 | 6 | Only a window rejection switches: `429` with `anthropic-ratelimit-unified-status: rejected` | A plain 429 clears in seconds and goes back to Claude Code untouched |
 | 7 | `/_use` takes JSON only and the proxy answers it, preflight included | A web page can POST a form to localhost but not JSON without a preflight, so no page can switch accounts |
-| 8 | Listens on 127.0.0.1 only | Whoever reaches the port spends the accounts |
+| 8 | Listens on 127.0.0.1 only and answers only a loopback `Host` (127.0.0.1, localhost, [::1]) with no `Origin` or `Sec-Fetch-Site` | Whoever reaches the port spends the accounts. A web page can reach it too: by DNS rebinding (its own name resolving to 127.0.0.1, so it reads the replies) or by a plain cross-origin POST. Claude Code sends neither header |
 | 9 | Standard library only | One small binary that holds tokens; nothing else to audit or update |
 | 10 | The account choice and spent marks live in memory | A restart starts from the default account; an account still spent says so on its next reply |
 
@@ -88,6 +88,7 @@ The long reason behind short lines in the code. Read before simplifying one away
 | `ServeHTTP` | `for range len(...) + 1` | Each account is tried once per request, so a run of spent replies ends in pass-through |
 | `ServeHTTP` | no token: `spend(..., unavailableBackoff)` | A refresh can take up to 45 s; without the backoff every request would wait on it again |
 | `newProxy` | `CheckRedirect` returns `ErrUseLastResponse` | A redirect goes back to Claude Code as it is; the proxy does not follow it with an account's token |
+| `ServeHTTP` | `.` and `..` path segments refused | Upstream could resolve `/v1/messages/../../x` past the messages API, putting an account's token on another endpoint (invariant 2) |
 | `relay` | flush after every read | A stream of events is not held back |
 | `accounts.list` | cached for `discoveryInterval` | Each login costs `security` calls; a new login still shows up within 30 s |
 | `credentialSources` | the user's Keychain item first, every other source kept | An older sign-in can leave a stale item or file under the same name; `readToken` keeps the token that lasts longest |

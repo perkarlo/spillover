@@ -27,6 +27,7 @@ Open a new terminal and run `claude` as usual. When one account's limit is hit, 
 - It never sets `CLAUDE_CODE_OAUTH_TOKEN` (that makes Claude Code drop its connectors and local MCP servers).
 - Accounts are the logins Claude Code already holds: the default one plus every `~/.claude-<name>` config directory that has a login. Tokens are read from the macOS Keychain item Claude Code keeps per config dir, or from `<dir>/.credentials.json`. They are never copied, logged, or exposed by `GET /_status`.
 - An expired token is refreshed by running one tiny `claude -p` under that account's directory, so Claude Code stays the only thing that refreshes a login.
+- The proxy listens on 127.0.0.1 and answers only requests addressed to the loopback that no browser sent, so a web page cannot use it, even through DNS rebinding.
 - If no account can serve a request, it passes through with Claude Code's own login: never worse than no proxy.
 - Only a window rejection (`429` with `anthropic-ratelimit-unified-status: rejected`) switches accounts. Ordinary rate limits go back to Claude unchanged.
 

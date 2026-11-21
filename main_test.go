@@ -333,3 +333,39 @@ func TestAnExpiredLoginIsSkippedWithoutARefreshAndEveryExpiryIsInStatus(t *testi
 		t.Fatal(string(raw))
 	}
 }
+
+func TestOnlyLocalNonBrowserRequestsWithoutDotSegmentsAreAnswered(t *testing.T) {
+	up := newUpstream(t)
+	server, _ := start(t, makeHome(t, map[string]string{"default": "t-default"}), up)
+	cases := []struct {
+		name, path string
+		set        func(*http.Request)
+		want       int
+	}{
+		{"loopback", "/v1/messages", func(*http.Request) {}, 200},
+		{"localhost name", "/v1/messages", func(r *http.Request) { r.Host = "localhost:48617" }, 200},
+		{"rebound domain", "/v1/messages", func(r *http.Request) { r.Host = "evil.example:48617" }, 403},
+		{"rebound status", "/_status", func(r *http.Request) { r.Host = "evil.example:48617" }, 403},
+		{"browser origin", "/v1/messages", func(r *http.Request) { r.Header.Set("Origin", "https://evil.example") }, 403},
+		{"browser fetch", "/_status", func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") }, 403},
+		{"dot segments", "/v1/messages/../../api/oauth/profile", func(*http.Request) {}, 400},
+	}
+	for _, c := range cases {
+		req, _ := http.NewRequest("POST", server.URL+c.path, strings.NewReader("{}"))
+		if c.path == "/_status" {
+			req.Method = "GET"
+		}
+		c.set(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(c.name, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.want {
+			t.Fatal(c.name, resp.StatusCode)
+		}
+	}
+	if len(up.seen) != 2 {
+		t.Fatal("only the two allowed requests reach upstream", up.paths)
+	}
+}
