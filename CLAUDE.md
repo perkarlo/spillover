@@ -9,7 +9,7 @@ spillover lets one Claude Code install use several Claude logins. A local proxy 
 messages request on the active account's own token; when Anthropic says that account's 5-hour or
 weekly window is spent, it replays the same request on the next account before Claude Code sees
 the error. One Go binary, standard library only, is both the proxy (`spillover`, `spillover
-serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT); named limitbreak until DEV-923.
+serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT); named limitbreak until November 2026.
 
 ```
 .
@@ -39,7 +39,7 @@ Deliberate decisions. Before changing one, read why it is here.
 | # | Rule | Why |
 | --- | --- | --- |
 | 1 | A token never reaches output, a log line, an error message or `/_status` | Tokens are read in place from Claude Code's own store; whoever sees one holds the account. `account.Dir` and `Path` are `json:"-"`, `readUsage` masks a token the server echoes |
-| 2 | Only `/v1/messages*` goes on an account's token; every other path passes through with Claude Code's own credentials | Connectors, MCP, artifacts and the profile belong to the login Claude Code holds; moving them breaks them or mixes two accounts in one session. Claude Code's `/usage` read never reaches the proxy: it goes to `https://api.anthropic.com` directly (DEV-922) |
+| 2 | Only `/v1/messages*` goes on an account's token; every other path passes through with Claude Code's own credentials | Connectors, MCP, artifacts and the profile belong to the login Claude Code holds; moving them breaks them or mixes two accounts in one session. Claude Code's `/usage` read never reaches the proxy: it goes to `https://api.anthropic.com` directly |
 | 3 | `CLAUDE_CODE_OAUTH_TOKEN` is never set for Claude Code | With it Claude Code drops its claude.ai connectors and local MCP servers |
 | 4 | Only Claude Code refreshes a login: one `claude -p` under that config dir. spillover never writes a credential | Refresh tokens rotate; a second refresher logs Claude Code out |
 | 5 | Never worse than no proxy: when no account can take a request, it goes on as Claude Code made it | The proxy sits in front of every session; its failure must cost nothing. `shell.sh` runs plain `claude` when the proxy is down |
@@ -64,7 +64,7 @@ Deliberate decisions. Before changing one, read why it is here.
 | Topic | Rule |
 | --- | --- |
 | Language | Code, comments, CLI output, README, this file and commits in English |
-| Commits | `component: what changed (DEV-N)`, concrete, no adjectives: `proxy: skip a login that gives no token for 5 minutes (DEV-921)`. Components: `proxy`, `cli`, `usage`, `install`, `docs`, `ci` |
+| Commits | `component: what changed`, concrete, no adjectives, an issue as `(#N)` when there is one: `proxy: skip a login that gives no token for 5 minutes`. Components: `proxy`, `cli`, `usage`, `install`, `docs`, `ci` |
 | Comments | One to three lines saying what; the why goes to Defense lines. `checks.sh` rejects 4+ comment lines in a row |
 | Commands | A command is a `case` in `runCommand`, a line in the `usage` text and a mention in README; `checks.sh` compares the three |
 | Exit codes | `0` done, `1` error (`error: <message>` on stderr), `2` usage mistake |
@@ -98,7 +98,7 @@ The long reason behind short lines in the code. Read before simplifying one away
 | `usagePath` | `/api/oauth/usage` | The endpoint Claude Code's `/usage` reads; not a documented API, it may change |
 | `statusText` | the windows come from Claude Code's `rate_limits`, not from the usage endpoint | Claude Code sends its `/usage` read to its OAuth `BASE_API_URL` (`https://api.anthropic.com`), which `ANTHROPIC_BASE_URL` does not move (measured on 2.1.310 to 2.1.316); `rate_limits` comes from the reply headers the proxy relays, so it is the answering account's |
 | `showStatusLine` | `spillover: not running` only on a refused connection | A slow `/_status` (Keychain reads on discovery) is not a stopped proxy |
-| `install.sh` | old labels and units booted out and removed | Earlier builds ran as `com.hicomputers.claude-account-proxy`, `dev.claude-account-proxy` and `dev.limitbreak`; two services would fight for the port |
+| `install.sh` | old labels and units booted out and removed | Earlier builds ran as `com.hicomputers.claude-account-proxy`, `dev.claude-account-proxy`, `dev.limitbreak` and `co.birtik.spillover`; two services would fight for the port |
 | `install.sh` | `sleep 1` after `launchctl bootout` | Bootstrapping while the old job is still going away fails |
 | `install.sh` | old binaries removed; `claude-account-proxy-shell.sh` and `limitbreak-shell.sh` become one-line shims | A profile line from an earlier build keeps working |
 | `shell.sh` | `curl -m 1` on `/_status` | A stopped proxy costs at most a second before plain `claude` runs |
@@ -117,5 +117,5 @@ The long reason behind short lines in the code. Read before simplifying one away
 | File added or removed | the tree at the top | no |
 | Run line | the "After every change" line and `ci.yml`, same commands | yes, checks.sh |
 
-The default port is 48617 and the launchd label `co.birtik.spillover`; `checks.sh` holds both to the
+The default port is 48617 and the launchd label `io.github.perkarlo.spillover`; `checks.sh` holds both to the
 code. CI runs no real login: a switch on live accounts is still checked by hand after `./install.sh`.

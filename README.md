@@ -13,7 +13,7 @@ claude ──ANTHROPIC_BASE_URL──▶ proxy 127.0.0.1:48617 ──▶ api.ant
 ## Quick start
 
 ```sh
-git clone https://github.com/birtikco/spillover && cd spillover
+git clone https://github.com/perkarlo/spillover && cd spillover
 ./install.sh                                   # builds and starts the background service
 echo 'source "$HOME/.local/bin/spillover-shell.sh"' >> ~/.zshrc   # or ~/.bashrc
 spillover add                       # sign in another account (browser), repeat per account
@@ -35,7 +35,7 @@ Open a new terminal and run `claude` as usual. When one account's limit is hit, 
 Needs Go 1.22+ to build, macOS or Linux. Prebuilt binaries are attached to each [release](../../releases).
 
 ```sh
-git clone https://github.com/birtikco/spillover
+git clone https://github.com/perkarlo/spillover
 cd spillover
 ./install.sh          # builds, installs ~/.local/bin/spillover, starts a launchd / systemd user service
 ```
@@ -132,7 +132,7 @@ A request path may begin with `/_c/<client>/` to give a client (an agent, a tool
 
 ## Uninstall
 
-macOS: `launchctl bootout gui/$(id -u)/co.birtik.spillover; rm ~/Library/LaunchAgents/co.birtik.spillover.plist`.
+macOS: `launchctl bootout gui/$(id -u)/io.github.perkarlo.spillover; rm ~/Library/LaunchAgents/io.github.perkarlo.spillover.plist`.
 Linux: `systemctl --user disable --now spillover`.
 Then remove `~/.local/bin/spillover*` and the `source` line from your shell profile. Accounts you added stay as ordinary `~/.claude-<name>` logins; `spillover remove <name>` deletes one.
 

@@ -27,14 +27,14 @@ run install -m 644 "$here/shell.sh" "$bin/spillover-shell.sh"
 
 case "$(uname -s)" in
   Darwin)
-    plist="${HOME}/Library/LaunchAgents/co.birtik.spillover.plist"
+    plist="${HOME}/Library/LaunchAgents/io.github.perkarlo.spillover.plist"
     if ((dry)); then echo "+ write $plist"; else
       mkdir -p "$(dirname "$plist")"
       cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>co.birtik.spillover</string>
+  <key>Label</key><string>io.github.perkarlo.spillover</string>
   <key>ProgramArguments</key><array><string>${bin}/spillover</string></array>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${bin}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
@@ -42,11 +42,11 @@ case "$(uname -s)" in
 </dict></plist>
 PLIST
       # Earlier builds ran under other names; stop and remove them so two services never fight for the port.
-      for label in com.hicomputers.claude-account-proxy dev.claude-account-proxy dev.limitbreak; do
+      for label in com.hicomputers.claude-account-proxy dev.claude-account-proxy dev.limitbreak co.birtik.spillover; do
         old="${HOME}/Library/LaunchAgents/${label}.plist"
         if [[ -f "$old" ]]; then launchctl bootout "gui/$(id -u)/${label}" 2>/dev/null || true; rm -f "$old"; sleep 1; fi
       done
-      launchctl bootout "gui/$(id -u)/co.birtik.spillover" 2>/dev/null && sleep 1 || true
+      launchctl bootout "gui/$(id -u)/io.github.perkarlo.spillover" 2>/dev/null && sleep 1 || true
       launchctl bootstrap "gui/$(id -u)" "$plist"
     fi ;;
   Linux)

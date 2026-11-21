@@ -1,3 +1,3 @@
-module github.com/birtikco/spillover
+module github.com/perkarlo/spillover
 
 go 1.22
