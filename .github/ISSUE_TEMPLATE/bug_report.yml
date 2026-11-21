@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work the way the README says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a token, a credential file or a log line that contains one. A security problem goes through **Security > Report a vulnerability** instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. spillover add work
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: usage
+    attributes:
+      label: Output of `spillover usage --all`
+      description: Emails can be replaced with placeholders.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: "`~/Library/Logs/spillover.log` on macOS, `journalctl --user -u spillover` on Linux. Redact anything sensitive."
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: spillover release or commit
+    validations:
+      required: true
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code version (`claude --version`)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [macOS, Linux]
+    validations:
+      required: true

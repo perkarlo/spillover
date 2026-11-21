@@ -20,11 +20,15 @@ serve`) and the CLI. Forked from radu2lupu/limitbreak (MIT); named limitbreak un
 ├── install.sh       # builds or installs the binary, writes the launchd / systemd user service
 ├── shell.sh         # the `claude` function: through the proxy when it runs, plain when not
 ├── README.md        # user documentation
+├── CHANGELOG.md     # Keep a Changelog; a user-facing change goes under Unreleased
+├── CONTRIBUTING.md  # how to send a change
+├── SECURITY.md      # private vulnerability reporting and scope
 ├── CLAUDE.md        # this file
-├── LICENSE          # MIT, upstream copyright
+├── LICENSE          # MIT, upstream copyright and ours
 └── .github/
     ├── checks.sh    # consistency checks; run it locally too
-    └── workflows/   # ci.yml (vet, gofmt, test, checks), release.yml (binaries on a v* tag)
+    ├── ISSUE_TEMPLATE/, PULL_REQUEST_TEMPLATE.md, dependabot.yml
+    └── workflows/   # ci.yml (vet, gofmt, test, checks), release.yml (binaries on a v* tag), codeql.yml
 ```
 
 **After every change, run:** `go vet ./... && test -z "$(gofmt -l .)" && go test ./... && ./.github/checks.sh`
